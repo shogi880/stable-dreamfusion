@@ -69,7 +69,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
     
     ### additional options
-    parser.add_argument('--sd_version', type='str', default='CompVis', help="choose from [CompVis, waifu]")
+    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
 
     opt = parser.parse_args()
 

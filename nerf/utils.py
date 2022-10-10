@@ -314,7 +314,6 @@ class Trainer(object):
     ### ------------------------------	
 
     def train_step(self, data):
-
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
 
@@ -349,7 +348,7 @@ class Trainer(object):
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]
-            text_z = self.text_z[dirs]
+            text_z = self.text_z[dirs] # [2, 77, 768]
         else:
             text_z = self.text_z
         

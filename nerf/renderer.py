@@ -609,7 +609,7 @@ class NeRFRenderer(nn.Module):
     def render(self, rays_o, rays_d, staged=False, max_ray_batch=4096, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: pred_rgb: [B, N, 3]
-
+        # import ipdb; ipdb.set_trace()
         if self.cuda_ray:
             _run = self.run_cuda
         else:
