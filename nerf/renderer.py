@@ -168,7 +168,7 @@ class NeRFRenderer(nn.Module):
             from sklearn.neighbors import NearestNeighbors
             from scipy.ndimage import binary_dilation, binary_erosion
 
-            glctx = dr.RasterizeGLContext()
+            glctx = dr.RasterizeCudaContext()
 
             atlas = xatlas.Atlas()
             atlas.add_mesh(v_np, f_np)
@@ -271,7 +271,7 @@ class NeRFRenderer(nn.Module):
 
             print(f'[INFO] writing obj mesh to {obj_file}')
             with open(obj_file, "w") as fp:
-                fp.write(f'mtllib {name}.mtl \n')
+                fp.write(f'mtllib {name}mesh.mtl \n')
                 
                 print(f'[INFO] writing vertices {v_np.shape}')
                 for v in v_np:
@@ -319,6 +319,12 @@ class NeRFRenderer(nn.Module):
         nears, fars = raymarching.near_far_from_aabb(rays_o, rays_d, aabb, self.min_near)
         nears.unsqueeze_(-1)
         fars.unsqueeze_(-1)
+
+        # random sample light_d if not provided
+        if light_d is None:
+            # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
+            light_d = (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
+            light_d = safe_normalize(light_d)
 
         #print(f'nears = {nears.min().item()} ~ {nears.max().item()}, fars = {fars.min().item()} ~ {fars.max().item()}')
 
@@ -414,8 +420,8 @@ class NeRFRenderer(nn.Module):
         # mix background color
         if self.bg_radius > 0:
             # use the bg model to calculate bg_color
-            sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
-            bg_color = self.background(sph, rays_d.reshape(-1, 3)) # [N, 3]
+            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
+            bg_color = self.background(rays_d.reshape(-1, 3)) # [N, 3]
         elif bg_color is None:
             bg_color = 1
             
@@ -451,7 +457,7 @@ class NeRFRenderer(nn.Module):
         # random sample light_d if not provided
         if light_d is None:
             # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
-            light_d = - (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
+            light_d = (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
             light_d = safe_normalize(light_d)
 
         results = {}
@@ -520,8 +526,8 @@ class NeRFRenderer(nn.Module):
         if self.bg_radius > 0:
             
             # use the bg model to calculate bg_color
-            sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
-            bg_color = self.background(sph, rays_d) # [N, 3]
+            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
+            bg_color = self.background(rays_d) # [N, 3]
 
         elif bg_color is None:
             bg_color = 1

@@ -17,10 +17,10 @@ class StableDiffusion(nn.Module):
         try:
             with open('./TOKEN', 'r') as f:
                 self.token = f.read().replace('\n', '') # remove the last \n!
-                print(f'[INFO] successfully loaded hugging face user token!')
+                print(f'[INFO] loaded hugging face access token from ./TOKEN!')
         except FileNotFoundError as e:
-            print(e)
-            print(f'[INFO] Please first create a file called TOKEN and copy your hugging face access token into it to download stable diffusion checkpoints.')
+            self.token = True
+            print(f'[INFO] try to load hugging face access token from the default place, make sure you have run `huggingface-cli login`.')
         
         self.device = device
         self.num_train_timesteps = 1000
@@ -41,6 +41,7 @@ class StableDiffusion(nn.Module):
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
+        self.alphas = self.scheduler.alphas_cumprod.to(self.device) # for convenience
 
         print(f'[INFO] loaded stable diffusion!')
 
@@ -93,8 +94,9 @@ class StableDiffusion(nn.Module):
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-        # w(t), one_minus_alpha_prod, i.e., sigma^2
-        w = (1 - self.scheduler.alphas_cumprod[t]).to(self.device)
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[t])
+        # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?
@@ -105,7 +107,7 @@ class StableDiffusion(nn.Module):
         latents.backward(gradient=grad, retain_graph=True)
         # torch.cuda.synchronize(); print(f'[TIME] guiding: backward {time.time() - _t:.4f}s')
 
-        return 0 # fake loss value
+        return 0 # dummy loss value
 
     def produce_latents(self, text_embeddings, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, latents=None):
 
