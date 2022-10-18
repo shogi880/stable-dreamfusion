@@ -196,6 +196,8 @@ class Trainer(object):
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
 
+        self.pretrain_nerf = self.opt.pretrain_nerf
+
         # text prompt
         ref_text = self.opt.text
     
@@ -208,6 +210,7 @@ class Trainer(object):
         # guide model
         self.guidance = guidance
 
+        # if self.opt.img_to_img is not None:
         if self.guidance is not None:
             assert ref_text is not None, 'Training must provide a text prompt!'
 
@@ -215,14 +218,13 @@ class Trainer(object):
                 p.requires_grad = False
 
             if not self.opt.dir_text:
-                self.text_z = self.guidance.get_text_embeds([ref_text])
+                self.text_z = self.guidance.get_text_embeds([ref_text])    
             else:
                 self.text_z = []
                 for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
                     text = f"{ref_text}, {d} view"
                     text_z = self.guidance.get_text_embeds([text])
                     self.text_z.append(text_z)
-        
         else:
             self.text_z = None
     
@@ -314,6 +316,7 @@ class Trainer(object):
     ### ------------------------------	
 
     def train_step(self, data):
+        # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
 
@@ -336,6 +339,7 @@ class Trainer(object):
                 shading = 'lambertian'
                 ambient_ratio = 0.1
 
+        
         # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
@@ -354,9 +358,14 @@ class Trainer(object):
         
         # encode pred_rgb to latents
         # _t = time.time()
-        loss = self.guidance.train_step(text_z, pred_rgb)
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-
+        if self.pretrain_nerf is not None:
+            loss = nn.MSELoss(pred_rgb, data['rgb_gt'])
+        else:
+            loss = self.guidance.train_step(text_z, pred_rgb)
+            # 2. calucate loss with grund true imagel specific by the ray.
+            
+            
         # occupancy loss
         pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
 
@@ -401,7 +410,7 @@ class Trainer(object):
         alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
         # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
         loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-                
+
         loss = self.opt.lambda_entropy * loss_entropy
 
         return pred_rgb, pred_depth, loss

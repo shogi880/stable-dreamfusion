@@ -67,6 +67,7 @@ class StableDiffusion(nn.Module):
 
         # Cat for final embeddings
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+
         return text_embeddings
 
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100):
@@ -179,7 +180,7 @@ class StableDiffusion(nn.Module):
         imgs = imgs.detach().cpu().permute(0, 2, 3, 1).numpy()
         imgs = (imgs * 255).round().astype('uint8')
 
-        return imgs
+        return imgs 
 
 
 if __name__ == '__main__':

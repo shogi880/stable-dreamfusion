@@ -202,6 +202,7 @@ class NeRFDataset:
             'W': self.W,
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],
+            # 'rays_gt': rays['rays_gt'], 
             'dir': dirs,
         }
 

@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0)
 
     ### training options
-    parser.add_argument('--iters', type=int, default=10000, help="training iters")
+    parser.add_argument('--iters', type=int, default=20000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
@@ -70,7 +70,8 @@ if __name__ == '__main__':
     
     ### additional options
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-
+    parser.add_argument('--load_model', type=str, help="use image guidance instead of text guidance")
+    parser.add_argument('--pretrain_nerf', type="store_true", help="if to pretrain nerf first")
     opt = parser.parse_args()
 
     # changed workspace based on the text prompt, sd_version, and seed.
@@ -104,7 +105,8 @@ if __name__ == '__main__':
     seed_everything(opt.seed)
 
     model = NeRFNetwork(opt)
-
+    
+    
     print(model)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -147,6 +149,9 @@ if __name__ == '__main__':
 
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
+        # model.load_state_dict(torch.load(opt.load_model))
+        trainer.load_checkpoint(opt.load_model)
+        
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
 
