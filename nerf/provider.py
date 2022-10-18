@@ -6,6 +6,7 @@ import tqdm
 import random
 import numpy as np
 from scipy.spatial.transform import Slerp, Rotation
+from PIL import Image
 
 import trimesh
 
@@ -170,19 +171,36 @@ class NeRFDataset:
         # poses, dirs = rand_poses(100, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
         # visualize_poses(poses.detach().cpu().numpy())
 
+        if self.opt.gt_dir is not None:
+            self.images_dir = os.path.join(self.opt.gt_dir, 'images')
+            self.poses_dir = os.path.join(self.opt.gt_dir, 'poses')
+            self.num_data =  len(os.listdir(self.images_dir))
+
 
     def collate(self, index):
 
         B = len(index) # always 1
 
+        img = None
         if self.training:
-            # random pose on the fly
-            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose)
+            if self.opt.gt_dir is None:
+                # random pose on the fly
+                poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose)
 
-            # random focal
-            fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
-            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
-            intrinsics = np.array([focal, focal, self.cx, self.cy])
+                # random focal
+                fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
+                focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+                intrinsics = np.array([focal, focal, self.cx, self.cy])
+            else:
+                i = np.random.choice(self.num_data)
+                full_image_path = os.path.join(self.images_dir, '%04d.png' % i)
+                full_pose_path = os.path.join(self.poses_dir, '%04d.txt' % i)
+
+                img = np.array(Image.open(full_image_path)).transpose(0, 3, 1, 2) / 255.0
+                poses = np.expand_dims(np.loadtxt(full_pose_path), 0)
+                fov = 40
+                focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+                intrinsics = np.array([focal, focal, self.cx, self.cy])
         else:
             # circle pose
             phi = (index[0] / self.size) * 360
@@ -204,6 +222,7 @@ class NeRFDataset:
             'rays_d': rays['rays_d'],
             # 'rays_gt': rays['rays_gt'], 
             'dir': dirs,
+            'rgb_gt': img,
         }
 
         return data

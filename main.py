@@ -72,6 +72,7 @@ if __name__ == '__main__':
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     parser.add_argument('--load_model', type=str, help="use image guidance instead of text guidance")
     parser.add_argument('--pretrain_nerf', type="store_true", help="if to pretrain nerf first")
+    parser.add_argument('--gt_dir', type=str, default=None, help='path to gt data')
     opt = parser.parse_args()
 
     # changed workspace based on the text prompt, sd_version, and seed.
