@@ -5,7 +5,7 @@ from nerf.provider import NeRFDataset
 from nerf.utils import *
 from optimizer import Shampoo
 
-# from nerf.gui import NeRFGUI
+from nerf.gui import NeRFGUI
 
 # torch.autograd.set_detect_anomaly(True)
 
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     
     ### dataset options
     # set bound to 16.
-    parser.add_argument('--bound', type=float, default=16, help="assume the scene is bounded in box(-bound, bound)")
+    parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
@@ -72,14 +72,32 @@ if __name__ == '__main__':
     ### additional options
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     parser.add_argument('--load_model', type=str, default=None, help="use image guidance instead of text guidance")
-    parser.add_argument('--nerf_trasfer', action="store_true", help="if to pretrain nerf first")
+    parser.add_argument('--nerf_transfer', action="store_true", help="if to pretrain nerf first")
     parser.add_argument('--nerf_pretrain', action="store_true", help="if to pretrain nerf first")
     parser.add_argument('--gt_dir', type=str, default=None, help='path to gt data')
     opt = parser.parse_args()
 
-    # changed workspace based on the text prompt, sd_version, and seed.
-    opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), opt.sd_version + '_'+ str(opt.seed))
+
+    if opt.nerf_transfer:  # during both pretrain and transfer.
+        print("setting opt parameter for nerf_transfer...")
+        opt.dir_text = False
+        opt.bound = 16
+        opt.w = 128
+        opt.h = 128
+        assert opt.gt_dir is not None # get gt camera pose.
+        assert opt.load_model is not None
+        opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_from_"+ opt.load_model.split('/')[-1].split('.')[0], str(opt.seed))
     
+    if opt.nerf_pretrain: # during only pretrain.
+        print("setting opt parameter for nerf_pretrain...")
+        assert opt.load_model is None
+        opt.iters = 5000  # set shorter train step.
+        opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), str(opt.seed))
+    
+    # changed workspace based on the text prompt, sd_version, seed, and pre-train model.
+    
+            
+        
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
@@ -94,10 +112,6 @@ if __name__ == '__main__':
         opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
-    if opt.gt_dir: 
-        opt.dir_text = False
-        print("setting h, w to 128")
-        opt.h = opt.w = 128
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork

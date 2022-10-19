@@ -171,7 +171,7 @@ class NeRFDataset:
         # poses, dirs = rand_poses(100, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
         # visualize_poses(poses.detach().cpu().numpy())
 
-        if self.opt.nerf_trasfer:
+        if self.opt.nerf_transfer:
             self.images_dir = os.path.join(self.opt.gt_dir, 'images')
             self.poses_dir = os.path.join(self.opt.gt_dir, 'poses')
             self.num_data =  len(os.listdir(self.images_dir))
@@ -184,7 +184,7 @@ class NeRFDataset:
         img = None
         dirs = None
         
-        if self.opt.nerf_trasfer:
+        if self.opt.nerf_transfer:
             i = np.random.choice(self.num_data)
             full_image_path = os.path.join(self.images_dir, '%04d.png' % i)
             full_pose_path = os.path.join(self.poses_dir, '%04d.txt' % i)
