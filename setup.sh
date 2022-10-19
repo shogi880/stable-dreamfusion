@@ -5,5 +5,5 @@ source ~/.zshrc
 conda deactivate
 
 source ~/venv/dreamfusion/bin/activate
-
-echo 'python main.py --text "A hamburger" -O'
+cd code/stable-dreamfusion 
+echo 'python main.py --text "A hamburger" -O --gt_dir gt_dir_1 --density_thresh 1 '

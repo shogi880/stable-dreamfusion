@@ -5,7 +5,7 @@ from nerf.provider import NeRFDataset
 from nerf.utils import *
 from optimizer import Shampoo
 
-from nerf.gui import NeRFGUI
+# from nerf.gui import NeRFGUI
 
 # torch.autograd.set_detect_anomaly(True)
 
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0)
 
     ### training options
-    parser.add_argument('--iters', type=int, default=20000, help="training iters")
+    parser.add_argument('--iters', type=int, default=15000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
@@ -45,7 +45,8 @@ if __name__ == '__main__':
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     
     ### dataset options
-    parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
+    # set bound to 16.
+    parser.add_argument('--bound', type=float, default=16, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
@@ -70,8 +71,9 @@ if __name__ == '__main__':
     
     ### additional options
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-    parser.add_argument('--load_model', type=str, help="use image guidance instead of text guidance")
-    parser.add_argument('--pretrain_nerf', type="store_true", help="if to pretrain nerf first")
+    parser.add_argument('--load_model', type=str, default=None, help="use image guidance instead of text guidance")
+    parser.add_argument('--nerf_trasfer', action="store_true", help="if to pretrain nerf first")
+    parser.add_argument('--nerf_pretrain', action="store_true", help="if to pretrain nerf first")
     parser.add_argument('--gt_dir', type=str, default=None, help='path to gt data')
     opt = parser.parse_args()
 
@@ -91,6 +93,11 @@ if __name__ == '__main__':
         opt.dir_text = True
         opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
+
+    if opt.gt_dir: 
+        opt.dir_text = False
+        print("setting h, w to 128")
+        opt.h = opt.w = 128
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -151,7 +158,8 @@ if __name__ == '__main__':
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         # model.load_state_dict(torch.load(opt.load_model))
-        trainer.load_checkpoint(opt.load_model)
+        if opt.load_model is not None:
+            trainer.load_checkpoint(opt.load_model)
         
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer

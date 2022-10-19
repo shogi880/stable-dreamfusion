@@ -29,6 +29,8 @@ from torch_ema import ExponentialMovingAverage
 
 from packaging import version as pver
 
+from torchvision.utils import save_image
+
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
     if pver.parse(torch.__version__) < pver.parse('1.10'):
@@ -196,7 +198,7 @@ class Trainer(object):
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
 
-        self.pretrain_nerf = self.opt.pretrain_nerf
+        # self.pretrain_nerf = self.opt.pretrain_nerf
 
         # text prompt
         ref_text = self.opt.text
@@ -312,9 +314,13 @@ class Trainer(object):
             if self.log_ptr: 
                 print(*args, file=self.log_ptr)
                 self.log_ptr.flush() # write immediately to file
-
-    ### ------------------------------	
-
+    	
+    def save_pred_rgb(self, pred_rgb):
+        save_path = os.path.join(self.workspace, 'training', f'df_{self.global_step:04d}_rgb.png')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_image(pred_rgb[0], save_path)
+    
+    ### ------------------------------    
     def train_step(self, data):
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
@@ -346,6 +352,12 @@ class Trainer(object):
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
+        if (self.local_step + 1) % 100 == 0:
+            self.save_pred_rgb(pred_rgb)
+            # self.save_pred_rgb(data['rgb_gt'])
+            
+        # cv2.imwrite(save_path, cv2.cvtColor(pred_rgb, cv2.COLOR_RGB2BGR))
+                
         # print(shading)
         # torch_vis_2d(pred_rgb[0])
         
@@ -359,8 +371,10 @@ class Trainer(object):
         # encode pred_rgb to latents
         # _t = time.time()
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-        if self.pretrain_nerf is not None:
-            loss = nn.MSELoss(pred_rgb, data['rgb_gt'])
+        if self.opt.nerf_pretrain:
+            # print('using gt dir...')
+            # import pdb; pdb.set_trace()
+            loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
         else:
             loss = self.guidance.train_step(text_z, pred_rgb)
             # 2. calucate loss with grund true imagel specific by the ray.

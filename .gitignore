@@ -11,3 +11,5 @@ trial*/
 TOKEN
 output/
 nohup.out
+dataset/
+*.pth
