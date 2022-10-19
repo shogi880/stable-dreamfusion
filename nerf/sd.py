@@ -9,9 +9,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import time
+import os
+from torchvision.utils import save_image
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, sd_version='CompVis'):
+    def __init__(self, device, opt, sd_version='CompVis'):
         super().__init__()
 
         try:
@@ -51,6 +53,8 @@ class StableDiffusion(nn.Module):
         self.alphas = self.scheduler.alphas_cumprod.to(self.device) # for convenience
 
         print(f'[INFO] loaded stable diffusion!')
+        self.counter = 0
+        self.workspace = opt.workspace
 
     def get_text_embeds(self, prompt):
         # Tokenize text and get embeddings
@@ -70,6 +74,11 @@ class StableDiffusion(nn.Module):
 
         return text_embeddings
 
+    def save_pred_rgb(self, pred_rgb):
+        save_path = os.path.join(self.workspace, 'training', f'sd_{self.counter:04d}_noise.png')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_image(pred_rgb[0], save_path)
+        
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100):
         
         # interp to 512x512 to be fed into vae.
@@ -101,6 +110,10 @@ class StableDiffusion(nn.Module):
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
+        self.counter += 1
+        if (self.counter) % 100 == 0:
+            self.save_pred_rgb(noise_pred)
+        
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
         # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])

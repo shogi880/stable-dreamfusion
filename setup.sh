@@ -8,7 +8,7 @@ conda deactivate
 
 source ~/venv/dreamfusion/bin/activate
 cd code/stable-dreamfusion 
-echo 'python main.py --text "pose3" -O --gt_dir dataset/pose_3 --nerf_trasfer --nerf_pretrain'
+echo 'python main.py --text "pose_3_background" -O --gt_dir dataset/pose_3_black_background --nerf_transfer --nerf_pretrain'
 
 ### nerf_transfer
 
@@ -20,5 +20,4 @@ conda deactivate
 
 source ~/venv/dreamfusion/bin/activate
 cd code/stable-dreamfusion 
-echo 'python main.py --text "a boy" -O --gt_dir dataset/pose_2 --nerf_trasfer --load_model pretrain_models/pose_2_0010.pth'
-nohup python main.py --text "a man" -O --gt_dir dataset/pose_3 --nerf_trasfer --load_model pretrain_models/pose_3_0150.pth --seed 150 &!
+echo 'python main.py --text "a girl is dancing" -O --gt_dir dataset/pose_3 --nerf_transfer --load_model pretrain_models/pose_3_0050.pth'
