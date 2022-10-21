@@ -71,6 +71,7 @@ if __name__ == '__main__':
     ### additional options
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     parser.add_argument('--load_model', type=str, default=None, help="use image guidance instead of text guidance")
+    parser.add_argument('--manually_lr_scheduler', action="store_true", help="set lr manually")
     parser.add_argument('--nerf_transfer', action="store_true", help="if to pretrain nerf first")
     parser.add_argument('--nerf_pretrain', action="store_true", help="if to pretrain nerf first")
     parser.add_argument('--gt_dir', type=str, default=None, help='path to gt data')
@@ -101,6 +102,8 @@ if __name__ == '__main__':
             print("#" * 50, "setting opt parameter for nerf_pretrain...")
             assert opt.load_model is None
             opt.iters = 3000
+            opt.h=256  # to avoid OOM.
+            opt.w=256
             opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))    
         else:
             print("#" * 50, "setting opt parameter for nerf_transfer...")

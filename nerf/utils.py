@@ -199,7 +199,7 @@ class Trainer(object):
         self.console = Console()
 
         # self.pretrain_nerf = self.opt.pretrain_nerf
-
+        self.manually_lr_scheduler = opt.manually_lr_scheduler
         # text prompt
         ref_text = self.opt.text
     
@@ -947,7 +947,7 @@ class Trainer(object):
             except:
                 self.log("[WARN] Failed to load optimizer.")
         
-        if self.lr_scheduler and 'lr_scheduler' in checkpoint_dict:
+        if not self.manually_lr_scheduler and self.lr_scheduler and 'lr_scheduler' in checkpoint_dict:
             try:
                 self.lr_scheduler.load_state_dict(checkpoint_dict['lr_scheduler'])
                 self.log("[INFO] loaded scheduler.")

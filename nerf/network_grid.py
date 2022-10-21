@@ -159,7 +159,7 @@ class NeRFNetwork(NeRFRenderer):
     def background(self, d):
 
         h = self.encoder_bg(d) # [N, C]
-        
+
         h = self.bg_net(h)
 
         # sigmoid activation for rgb
