@@ -72,27 +72,10 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 First time running will take some time to compile the CUDA extensions.
 
 ```bash
-### stable-dreamfusion setting
-## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --fp16 --dir_text`
-# `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-# `--fp16` enables half-precision training.
-# `--dir_text` enables view-dependent prompting.
-python main.py --text "a hamburger" --workspace trial -O
-
-# if the above command fails to generate things (learns an empty scene), maybe try:
-# 1. disable random lambertian shading, simply use albedo as color:
-python main.py --text "a hamburger" --workspace trial -O --albedo_iters 10000 # i.e., set --albedo_iters >= --iters, which is default to 10000
-# 2. use a smaller density regularization weight:
-python main.py --text "a hamburger" --workspace trial -O --lambda_entropy 1e-5
-
-## after the training is finished:
-# test (exporting 360 video)
-python main.py --workspace trial -O --test
-# also save a mesh (with obj, mtl, and png texture)
-python main.py --workspace trial -O --test --save_mesh
-# test with a GUI (free view control!)
-python main.py --workspace trial -O --test --gui
+# pre-train NeRF
+python main.py --text "pose_2" -O --gt_dir dataset/pose_2 --nerf_transfer --nerf_pretrain
+# transfer pretrained NeRF.
+python main.py --text "a girl is dancing" -O --gt_dir dataset/pose_2 --nerf_transfer --load_model ./pretrain_models/pose_2_0030.pth
 
 ### dreamfields (CLIP) setting
 python main.py --text "a hamburger" --workspace trial_clip -O --guidance clip
