@@ -139,6 +139,7 @@ if __name__ == '__main__':
 
     seed_everything(opt.seed)
 
+    # get model.
     model = NeRFNetwork(opt)
     
     

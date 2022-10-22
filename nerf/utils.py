@@ -322,6 +322,9 @@ class Trainer(object):
         save_image(pred_rgb[0], save_path)
     
     ### ------------------------------    
+# remotes/ashawkey/main
+    ### ------------------------------	
+
     def train_step(self, data):
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
@@ -606,7 +609,6 @@ class Trainer(object):
         
         return outputs
 
-    
     # [GUI] test on a single image
     def test_gui(self, pose, intrinsics, W, H, bg_color=None, spp=1, downscale=1, light_d=None, ambient_ratio=1.0, shading='albedo'):
         
@@ -725,6 +727,7 @@ class Trainer(object):
                     pbar.set_description(f"loss={loss_val:.4f} ({total_loss/self.local_step:.4f})")
                 pbar.update(loader.batch_size)
 
+        # TODO: check ema,
         if self.ema is not None:
             self.ema.update()
 
