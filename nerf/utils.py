@@ -198,8 +198,6 @@ class Trainer(object):
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
 
-        # self.pretrain_nerf = self.opt.pretrain_nerf
-        self.manually_lr_scheduler = opt.manually_lr_scheduler
         # text prompt
         ref_text = self.opt.text
     
@@ -302,8 +300,11 @@ class Trainer(object):
                 self.load_checkpoint(self.use_checkpoint)
 
     def __del__(self):
-        if self.log_ptr: 
-            self.log_ptr.close()
+        try: 
+            if self.log_ptr: 
+                self.log_ptr.close()
+        except:
+            print("log_ptr already closed")
 
 
     def log(self, *args, **kwargs):
@@ -371,7 +372,7 @@ class Trainer(object):
         # encode pred_rgb to latents
         # _t = time.time()
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-        if self.opt.nerf_pretrain:
+        if self.opt.O3 and (not self.opt.nerf_transfer):
             # print('using gt dir...')
             # import pdb; pdb.set_trace()
             loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])

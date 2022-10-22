@@ -112,7 +112,8 @@ class StableDiffusion(nn.Module):
 
         self.counter += 1
         if (self.counter) % 100 == 0:
-            self.save_pred_rgb(noise_pred)
+            # self.save_pred_rgb(noise_pred)
+            pass
         
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])

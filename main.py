@@ -71,13 +71,13 @@ if __name__ == '__main__':
     ### additional options
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     parser.add_argument('--load_model', type=str, default=None, help="use image guidance instead of text guidance")
-    parser.add_argument('--manually_lr_scheduler', action="store_true", help="set lr manually")
-    parser.add_argument('--nerf_transfer', action="store_true", help="if to pretrain nerf first")
-    parser.add_argument('--nerf_pretrain', action="store_true", help="if to pretrain nerf first")
-    parser.add_argument('--gt_dir', type=str, default=None, help='path to gt data')
+    parser.add_argument('--O3', action="store_true", help="3d-to-3d")
+    parser.add_argument('--nerf_transfer', action="store_true", help="transfer nerf from pre-trained nerf")
+    parser.add_argument('--gt_dir', type=str, default="dataset/pose_2", help='path to gt data')
     opt = parser.parse_args()
 
-                
+        
+    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
@@ -92,28 +92,40 @@ if __name__ == '__main__':
         opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
-    opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))
-    # if nerf_transfer:
-    if opt.nerf_transfer:  # during both pretrain and transfer.
-        assert opt.gt_dir is not None # get gt camera pose.
+    elif opt.O3:
+        # pre-train nerf
+        opt.fp16 = True
+        opt.cuda_ray = True
+
         opt.dir_text = False
-        opt.bound = 16
-        if opt.nerf_pretrain: # during only pretrain.
-            print("#" * 50, "setting opt parameter for nerf_pretrain...")
-            assert opt.load_model is None
-            opt.iters = 3000
-            opt.h=256  # to avoid OOM.
-            opt.w=256
-            opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))    
-        else:
-            print("#" * 50, "setting opt parameter for nerf_transfer...")
-            opt.iters = 10000
-            opt.workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_from_"+ opt.load_model.split('/')[-1].split('.')[0], "seed_"+str(opt.seed))
-            
-            
+        opt.bound = 16  # use a smaller bound to avoid OOM.
+        opt.h = 512  # to avoid OOM.
+        opt.w = 512
+        opt.iters = 3000
+        
+        opt.max_steps = 256
+        opt.update_extra_interval = 32
+        """ tuning parameters to avoid OOM when using 512x512 resolution
+        fp16, cuda_ray, bound16, h256,  -> 35GB, ok. (Memory, quality)
+        fp16, bound16, h256, -> 16GB, noise.
+        fp16, bound16, h256, max_ray_batch=512 -> 16GB, ok.
+        fp16, cuda_ray, bound16, h256, steps=64 -> 6GB, ok?
+        fp16, cuda_ray, bound16, h512, steps=64 -> 14GB, ok?
+        fp16, cuda_ray, bound16, h512, steps=128 -> 21GB, ok.
+        fp16, cuda_ray, bound16, h512, steps=256 -> ?GB, ok.
+        fp16, cuda_ray, steps=256, inter8 -> OOM, x.
+        fp16, cuda_ray, steps=256, inter32 -> 20GB, ok.
+        fp16, cuda_ray, steps=512, inter32 -> OOM, x.
+        fp16, cuda_ray, bound16, h256, test1 -> 23GB, x.
+        fp16, cuda_ray, bound8, h256, w256 -> 28GB, x.
+        """
+        if opt.nerf_transfer: # during only pretrain.
+            opt.iters = 10000            
+            workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.load_model.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+    opt.workspace = workspace
     # changed workspace based on the text prompt, sd_version, seed, and pre-train model.
     
-
+ 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'tcnn':
@@ -174,7 +186,7 @@ if __name__ == '__main__':
 
         # model.load_state_dict(torch.load(opt.load_model))
         if opt.load_model is not None:
-            trainer.load_checkpoint(opt.load_model)
+            trainer.load_checkpoint(opt.load_model, model_only=True)
         
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
@@ -194,3 +206,4 @@ if __name__ == '__main__':
 
             if opt.save_mesh:
                 trainer.save_mesh(resolution=256)
+                
