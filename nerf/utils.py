@@ -303,22 +303,22 @@ class Trainer(object):
 
     
     def save_surface(self):
-        b = torch.linspace(-self.opt.bound, self.opt.bound, 100)
+        b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
         x, y, z = torch.meshgrid(b, b, b, indexing='ij')
         grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3)
 
         densities = self.model.density(grid_3d)
-        filter_idx = densities > 1.0
+        filter_idx = densities > self.opt.surface_threshold
         filtered_grid = grid_3d[filter_idx]
 
         hessians = []
 
         for p in filtered_grid:
             h = hessian(self.density_function, p)
-            hessians.append(h)
+            hessians.append(h.unsqueeze(0))
 
         self.filtered_grid = filtered_grid
-        self.hessians = torch.tensor(hessians)
+        self.hessians = torch.cat(hessians, dim=0)
 
 
 
@@ -438,11 +438,11 @@ class Trainer(object):
             new_hessians = []
             for p in self.filtered_grid:
                 h = hessian(self.density_function, p, create_graph=True)
-                new_hessians.append(h)
+                new_hessians.append(h.unsqueeze(0))
 
-            new_hessians = torch.tensor(new_hessians)
-            steins_loss = nn.functional.mse_loss(self.hessian, new_hessians)
-            loss = loss + self.opt.lambda_surface * steins_loss
+            new_hessians = torch.cat(new_hessians, dim=0)
+            surface_loss = nn.functional.mse_loss(new_hessians, self.hessian)
+            loss = loss + self.opt.lambda_surface * surface_loss
             # 2. calucate loss with grund true imagel specific by the ray.
             
             

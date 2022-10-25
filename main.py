@@ -80,6 +80,8 @@ if __name__ == '__main__':
     parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
     parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
+    parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
+    parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
     opt = parser.parse_args()
 
         
