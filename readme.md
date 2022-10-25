@@ -59,6 +59,7 @@ Please download the dataset folder and place in `./stable-dreamfusion`.
 First, to pre-train a NeRF with downloaded poses dataset. (we provided the model.pth in the drive)
 
 ```bash
+
 # pre-train NeRF
 python main.py --text "pose_1" -O3 --gt_dir dataset/pose_1 --save_mesh
 ```
