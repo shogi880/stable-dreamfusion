@@ -2,7 +2,7 @@
 
 A pytorch implementation of the 3D-to-3D pipeline based on [Stable-Dreamfusion](https://github.com/ashawkey/stable-dreamfusion) text-to-3D model.
 
-Colab notebook for usage: [![Open In Colab](https://drive.google.com/file/d/1BN9N1k8oQwXFWBF8PZElQtW3QFzGsAJG/view?usp=sharing)
+Colab notebook for usage: [Open In Colab](https://drive.google.com/file/d/1BN9N1k8oQwXFWBF8PZElQtW3QFzGsAJG/view?usp=sharing)
 
 # Important Notice
 This project is a **work-in-progress**, welcome for any contribution and collaboration.
