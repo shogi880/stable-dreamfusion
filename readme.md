@@ -47,6 +47,7 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 First time running will take some time to compile the CUDA extensions.
 
 ```bash
+
 # pre-train NeRF
 python main.py --text "pose_1" -O3 --gt_dir dataset/pose_1 --save_mesh
 
