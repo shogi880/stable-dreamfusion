@@ -2,12 +2,16 @@
 
 A pytorch implementation of the 3D-to-3D pipeline based on [Stable-Dreamfusion](https://github.com/ashawkey/stable-dreamfusion) text-to-3D model.
 
-Colab notebook for usage: [![Open In Colab]()
+Colab notebook for usage: [![Open In Colab](https://drive.google.com/file/d/1BN9N1k8oQwXFWBF8PZElQtW3QFzGsAJG/view?usp=sharing)
 
 # Important Notice
 This project is a **work-in-progress**, welcome for any contribution and collaboration.
+The main problems in stable-dreamfusion are still unsolved.
+- Alleviate the multi-face Janus problem.
+- Better mesh (improve the surface quality).
 
-# Install (refer to [ashawkey/stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion)
+
+# Install (refer to [ashawkey/stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion))
 
 
 ```bash
@@ -43,19 +47,30 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 
 
 # Usage
+## Dataset
+Our 3D-to-3D pipeline aims to transfer human skeletons with different poses to novel 3D assets in blender.
+We collect the 100 images from 100 camera poses on a circle orbit for each pose.
+The blender scripts and all dataset can be found at [google drive](https://drive.google.com/drive/folders/1lpXdhT5pFoaINw__csJhp1wtxD2DBO5n?usp=sharing).
 
-First time running will take some time to compile the CUDA extensions.
+Please download the dataset folder and place in `./stable-dreamfusion`.
+
+## Run command
+
+First, to pre-train a NeRF with downloaded poses dataset. (we provided the model.pth in the drive)
 
 ```bash
 # pre-train NeRF
 python main.py --text "pose_1" -O3 --gt_dir dataset/pose_1 --save_mesh
+```
 
 # transfer pretrained NeRF.
-# --back_view_prompt = " " to aviod Janus problem.
-# --reload_model to load pretrain model from pretrain_ckpt.
-python main.py --text "a raccoon astronaut" -O3 --nerf_transfer --pretrain_ckpt ./pretrain_models/pose_1_0030.pth --reload_model --save_mesh --back_view_prompt " " 
 
+```bash
+# --reload_model to load pretrain model from pretrain_ckpt.
+python main.py --text "a raccoon astronaut" -O3 --nerf_transfer --pretrain_ckpt ./pretrain_models/model.pth --reload_model --save_mesh
 ```
+
+
 # Acknowledgement
 
 * The amazing pytorch-implementation project: [Stable-Dreamfusion](https://github.com/ashawkey/stable-dreamfusion).
