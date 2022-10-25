@@ -146,7 +146,7 @@ def circle_poses(device, radius=1.25, theta=60, phi=0, return_dirs=False, angle_
     else:
         dirs = None
     
-    return poses, dirs    
+    return poses, dirs
     
 
 class NeRFDataset:
@@ -200,6 +200,10 @@ class NeRFDataset:
             fov = 50
             focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
             intrinsics = np.array([focal, focal, self.cx, self.cy])
+
+            #thetas = np.rad2deg(np.arccos(-poses[:, 2, 2]))
+            #phis = np.rad2deg(np.arctan2(poses[:, 1, 2], poses[:, 0, 2]))
+            #dirs = get_view_direction(thetas, phis, overhead=30, front=60)
             
             if i <= 10:
                 dirs = 0  # front.
