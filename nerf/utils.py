@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.autograd.functional import hessian
 import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
 
@@ -298,6 +299,29 @@ class Trainer(object):
                 self.log(f"[INFO] Loading {self.use_checkpoint} ...")
                 self.load_checkpoint(self.use_checkpoint)
 
+        self.density_function = lambda x : self.model.density(x.unsqueeze(0))['sigma'].flatten()
+
+    
+    def save_surface(self):
+        b = torch.linspace(-self.opt.bound, self.opt.bound, 100)
+        x, y, z = torch.meshgrid(b, b, b, indexing='ij')
+        grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3)
+
+        densities = self.model.density(grid_3d)
+        filter_idx = densities > 1.0
+        filtered_grid = grid_3d[filter_idx]
+
+        hessians = []
+
+        for p in filtered_grid:
+            h = hessian(self.density_function, p)
+            hessians.append(h)
+
+        self.filtered_grid = filtered_grid
+        self.hessians = torch.tensor(hessians)
+
+
+
     # calculate the text embs.
     def prepare_text_embeddings(self):
 
@@ -410,6 +434,15 @@ class Trainer(object):
             loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
         else:
             loss = self.guidance.train_step(text_z, pred_rgb)
+
+            new_hessians = []
+            for p in self.filtered_grid:
+                h = hessian(self.density_function, p, create_graph=True)
+                new_hessians.append(h)
+
+            new_hessians = torch.tensor(new_hessians)
+            steins_loss = nn.functional.mse_loss(self.hessian, new_hessians)
+            loss = loss + self.opt.lambda_surface * steins_loss
             # 2. calucate loss with grund true imagel specific by the ray.
             
             

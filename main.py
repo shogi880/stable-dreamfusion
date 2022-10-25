@@ -61,6 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
+    parser.add_argument('--lambda_surface', type=float, default=1e-1, help="loss scale for surface preservation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -180,6 +181,7 @@ if __name__ == '__main__':
         # model.load_state_dict(torch.load(opt.load_model))
         if opt.reload_model:
             trainer.load_checkpoint(opt.pretrain_ckpt, model_only=True)
+            trainer.save_surface()
         
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
