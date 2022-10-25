@@ -6,6 +6,7 @@ import tqdm
 import random
 import numpy as np
 from scipy.spatial.transform import Slerp, Rotation
+from PIL import Image
 
 import trimesh
 
@@ -43,6 +44,7 @@ def get_view_direction(thetas, phis, overhead, front):
     # side (right) = 3  [180+front, 360)
     # top = 4                               [0, overhead]
     # bottom = 5                            [180-overhead, 180]
+    
     res = torch.zeros(thetas.shape[0], dtype=torch.long)
     # first determine by phis
     res[(phis < front)] = 0
@@ -170,19 +172,57 @@ class NeRFDataset:
         # poses, dirs = rand_poses(100, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
         # visualize_poses(poses.detach().cpu().numpy())
 
+        if self.opt.O3:
+            self.images_dir = os.path.join(self.opt.gt_dir, 'images')
+            self.poses_dir = os.path.join(self.opt.gt_dir, 'poses')
+            self.num_data =  len(os.listdir(self.images_dir))
+
 
     def collate(self, index):
 
         B = len(index) # always 1
 
-        if self.training:
-            # random pose on the fly
+        img = None
+        dirs = None
+        
+        # if self.opt.O3 and (not self.opt.nerf_transfer):
+        # import ipdb; ipdb.set_trace()
+        if self.opt.O3:
+            # self.opt.test
+            i = np.random.choice(self.num_data) if self.training else index[0]
+            full_image_path = os.path.join(self.images_dir, '%04d.png' % i)
+            full_pose_path = os.path.join(self.poses_dir, '%04d.txt' % i)
+            # import ipdb; ipdb.set_trace()
+            if self.opt.gt_dir is not None:
+                img = np.expand_dims(np.array(Image.open(full_image_path).resize((self.W, self.H))), 0).transpose(0, 3, 1, 2) / 255.0
+                img = torch.from_numpy(img[:, :3]).float().to(self.device)
+            poses = torch.from_numpy(np.expand_dims(np.loadtxt(full_pose_path), 0).astype(np.float32)).to(self.device)
+            fov = 50
+            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+            intrinsics = np.array([focal, focal, self.cx, self.cy])
+            
+            if i <= 10:
+                dirs = 0  # front.
+            elif 10 < i <= 40: 
+                dirs = 1
+            elif 40 < i <= 70:
+                dirs = 2
+            elif 70 < i <= 90:
+                dirs = 3
+            elif 90 < i <= 100:
+                dirs = 0
+            
+                
+            
+        elif self.training:
+            #     # random pose on the fly
             poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose)
-
+            # import ipdb; ipdb.set_trace()
             # random focal
             fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
             focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
             intrinsics = np.array([focal, focal, self.cx, self.cy])
+                
         else:
             # circle pose
             phi = (index[0] / self.size) * 360
@@ -193,7 +233,6 @@ class NeRFDataset:
             focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
             intrinsics = np.array([focal, focal, self.cx, self.cy])
 
-
         # sample a low-resolution but full image for CLIP
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 
@@ -203,6 +242,7 @@ class NeRFDataset:
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],
             'dir': dirs,
+            'rgb_gt': img,
         }
 
         return data

@@ -29,6 +29,8 @@ from torch_ema import ExponentialMovingAverage
 
 from packaging import version as pver
 
+from torchvision.utils import save_image
+
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
     if pver.parse(torch.__version__) < pver.parse('1.10'):
@@ -211,8 +213,17 @@ class Trainer(object):
             for p in self.guidance.parameters():
                 p.requires_grad = False
 
-            self.prepare_text_embeddings()
-        
+
+            if not self.opt.dir_text:
+                self.text_z = self.guidance.get_text_embeds([ref_text])    
+            else:
+                self.text_z = []
+                for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+                    text = f"{ref_text}, {d} view"
+                    if opt.back_view_prompt is not None and d == 'back': 
+                        text = opt.back_view_prompt
+                    text_z = self.guidance.get_text_embeds([text])
+                    self.text_z.append(text_z)
         else:
             self.text_z = None
     
@@ -319,8 +330,11 @@ class Trainer(object):
                 self.text_z.append(text_z)
 
     def __del__(self):
-        if self.log_ptr: 
-            self.log_ptr.close()
+        try: 
+            if self.log_ptr: 
+                self.log_ptr.close()
+        except:
+            print("log_ptr already closed")
 
 
     def log(self, *args, **kwargs):
@@ -331,11 +345,18 @@ class Trainer(object):
             if self.log_ptr: 
                 print(*args, file=self.log_ptr)
                 self.log_ptr.flush() # write immediately to file
-
+    	
+    def save_pred_rgb(self, pred_rgb):
+        save_path = os.path.join(self.workspace, 'training', f'df_{self.global_step:04d}_rgb.png')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_image(pred_rgb[0], save_path)
+    
+    ### ------------------------------    
+# remotes/ashawkey/main
     ### ------------------------------	
 
     def train_step(self, data):
-
+        # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
 
@@ -358,27 +379,40 @@ class Trainer(object):
                 shading = 'lambertian'
                 ambient_ratio = 0.1
 
+        
         # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
+        if (self.local_step + 1) % 100 == 0:
+            self.save_pred_rgb(pred_rgb)
+            # self.save_pred_rgb(data['rgb_gt'])
+            
+        # cv2.imwrite(save_path, cv2.cvtColor(pred_rgb, cv2.COLOR_RGB2BGR))
+                
         # print(shading)
         # torch_vis_2d(pred_rgb[0])
         
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]
-            text_z = self.text_z[dirs]
+            text_z = self.text_z[dirs] # [2, 77, 768]
         else:
             text_z = self.text_z
         
         # encode pred_rgb to latents
         # _t = time.time()
-        loss = self.guidance.train_step(text_z, pred_rgb)
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-
+        
+        if self.opt.O3 and (not self.opt.nerf_transfer): # using mse loss for pre-training NeRF.
+            loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
+        else:
+            loss = self.guidance.train_step(text_z, pred_rgb)
+            # 2. calucate loss with grund true imagel specific by the ray.
+            
+            
         # occupancy loss
         pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
 
@@ -427,7 +461,7 @@ class Trainer(object):
         alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
         # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
         loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-                
+
         loss = self.opt.lambda_entropy * loss_entropy
 
         return pred_rgb, pred_depth, loss
@@ -611,7 +645,6 @@ class Trainer(object):
         
         return outputs
 
-    
     # [GUI] test on a single image
     def test_gui(self, pose, intrinsics, W, H, bg_color=None, spp=1, downscale=1, light_d=None, ambient_ratio=1.0, shading='albedo'):
         
@@ -730,6 +763,7 @@ class Trainer(object):
                     pbar.set_description(f"loss={loss_val:.4f} ({total_loss/self.local_step:.4f})")
                 pbar.update(loader.batch_size)
 
+        # TODO: check ema,
         if self.ema is not None:
             self.ema.update()
 

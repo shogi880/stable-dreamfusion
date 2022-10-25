@@ -16,15 +16,16 @@ if __name__ == '__main__':
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
     parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
+    parser.add_argument('-O3', action="store_true", help="3d-to-3d")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
-    parser.add_argument('--workspace', type=str, default='workspace')
+    parser.add_argument('--workspace', type=str, default='/home/acc12252dc/linked_tmp/logs/dreamfusion')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
 
     ### training options
-    parser.add_argument('--iters', type=int, default=10000, help="training iters")
+    parser.add_argument('--iters', type=int, default=15000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
@@ -70,9 +71,18 @@ if __name__ == '__main__':
     parser.add_argument('--light_theta', type=float, default=60, help="default GUI light direction in [0, 180], corresponding to elevation [90, -90]")
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
-
+    
+    ### additional options
+    parser.add_argument('--nerf_transfer', action="store_true", help="transfer nerf from pre-trained nerf")
+    parser.add_argument('--gt_dir', type=str, default="dataset/pose_2", help='path to gt data')
+    parser.add_argument('--pretrain_ckpt', type=str, default=None, help="use image guidance instead of text guidance")
+    parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
+    parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
+    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     opt = parser.parse_args()
 
+        
+    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
@@ -81,7 +91,9 @@ if __name__ == '__main__':
 
         # opt.lambda_entropy = 1e-4
         # opt.lambda_opacity = 0
-
+        opt.h = 128  # get OOM using 256...
+        opt.w = 128
+        
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
@@ -90,6 +102,24 @@ if __name__ == '__main__':
         opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
+    elif opt.O3:
+        opt.fp16 = True
+        opt.cuda_ray = True
+
+        opt.h = 256
+        opt.w = 256
+        opt.iters = 3000  # it's enough for pre-training.
+        
+        if opt.nerf_transfer: # during only pretrain.
+            opt.iters = 10000
+            opt.dir_text = True
+            if opt.back_view_prompt is not None:
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + f"back_view_{opt.back_view_prompt}", "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+            else:
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+    opt.workspace = workspace
+    
+ 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'grid':
@@ -101,8 +131,10 @@ if __name__ == '__main__':
 
     seed_everything(opt.seed)
 
+    # get model.
     model = NeRFNetwork(opt)
-
+    
+    
     print(model)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -111,7 +143,7 @@ if __name__ == '__main__':
         guidance = None # no need to load guidance model at test
 
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
-
+            
         if opt.gui:
             gui = NeRFGUI(opt, trainer)
             gui.render()
@@ -127,7 +159,8 @@ if __name__ == '__main__':
         
         if opt.guidance == 'stable-diffusion':
             from nerf.sd import StableDiffusion
-            guidance = StableDiffusion(device)
+            # add a stable diffusion guidance model
+            guidance = StableDiffusion(device, opt)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)
@@ -144,6 +177,10 @@ if __name__ == '__main__':
 
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
+        # model.load_state_dict(torch.load(opt.load_model))
+        if opt.reload_model:
+            trainer.load_checkpoint(opt.pretrain_ckpt, model_only=True)
+        
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
 
@@ -162,3 +199,4 @@ if __name__ == '__main__':
 
             if opt.save_mesh:
                 trainer.save_mesh(resolution=256)
+                

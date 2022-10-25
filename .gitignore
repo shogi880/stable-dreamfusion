@@ -9,3 +9,7 @@ trial*/
 .vs/
 
 TOKEN
+output/
+nohup.out
+*.pth
+dataset/*

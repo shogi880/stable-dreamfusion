@@ -9,6 +9,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import time
+import os
+from torchvision.utils import save_image
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -17,7 +19,7 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device, opt, sd_version='CompVis'):
         super().__init__()
 
         try:
@@ -33,9 +35,10 @@ class StableDiffusion(nn.Module):
         self.min_step = int(self.num_train_timesteps * 0.02)
         self.max_step = int(self.num_train_timesteps * 0.98)
 
+        # import ipdb; ipdb.set_trace()
         print(f'[INFO] loading stable diffusion...')
-                
         # 1. Load the autoencoder model which will be used to decode the latents into image space. 
+
         self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
 
         # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
@@ -50,6 +53,8 @@ class StableDiffusion(nn.Module):
         self.alphas = self.scheduler.alphas_cumprod.to(self.device) # for convenience
 
         print(f'[INFO] loaded stable diffusion!')
+        self.counter = 0
+        self.workspace = opt.workspace
 
     def get_text_embeds(self, prompt, negative_prompt):
         # prompt, negative_prompt: [str]
@@ -68,9 +73,14 @@ class StableDiffusion(nn.Module):
 
         # Cat for final embeddings
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+
         return text_embeddings
 
-
+    def save_pred_rgb(self, pred_rgb):
+        save_path = os.path.join(self.workspace, 'training', f'sd_{self.counter:04d}_noise.png')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_image(pred_rgb[0], save_path)
+        
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100):
         
         # interp to 512x512 to be fed into vae.
@@ -102,6 +112,11 @@ class StableDiffusion(nn.Module):
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
+        self.counter += 1
+        if (self.counter) % 100 == 0:
+            # self.save_pred_rgb(noise_pred)
+            pass
+        
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
         # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
@@ -184,7 +199,7 @@ class StableDiffusion(nn.Module):
         imgs = imgs.detach().cpu().permute(0, 2, 3, 1).numpy()
         imgs = (imgs * 255).round().astype('uint8')
 
-        return imgs
+        return imgs 
 
 
 if __name__ == '__main__':
@@ -212,7 +227,3 @@ if __name__ == '__main__':
     # visualize image
     plt.imshow(imgs[0])
     plt.show()
-
-
-
-

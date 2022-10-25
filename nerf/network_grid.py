@@ -115,6 +115,7 @@ class NeRFNetwork(NeRFRenderer):
 
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
+
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], view direction, nomalized in [-1, 1]
         # l: [3], plane light direction, nomalized in [-1, 1]
@@ -158,7 +159,7 @@ class NeRFNetwork(NeRFRenderer):
     def background(self, d):
 
         h = self.encoder_bg(d) # [N, C]
-        
+
         h = self.bg_net(h)
 
         # sigmoid activation for rgb
