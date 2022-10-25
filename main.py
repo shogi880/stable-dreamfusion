@@ -15,6 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
     parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
+    parser.add_argument('-O3', action="store_true", help="3d-to-3d")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
@@ -69,11 +70,12 @@ if __name__ == '__main__':
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
     
     ### additional options
-    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-    parser.add_argument('--load_model', type=str, default=None, help="use image guidance instead of text guidance")
-    parser.add_argument('--O3', action="store_true", help="3d-to-3d")
     parser.add_argument('--nerf_transfer', action="store_true", help="transfer nerf from pre-trained nerf")
     parser.add_argument('--gt_dir', type=str, default="dataset/pose_2", help='path to gt data')
+    parser.add_argument('--pretrain_ckpt', type=str, default=None, help="use image guidance instead of text guidance")
+    parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
+    parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
+    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     opt = parser.parse_args()
 
         
@@ -85,7 +87,9 @@ if __name__ == '__main__':
         opt.cuda_ray = True
         # opt.lambda_entropy = 1e-4
         # opt.lambda_opacity = 0
-
+        opt.h = 128  # get OOM using 256...
+        opt.w = 128
+        
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
@@ -93,37 +97,21 @@ if __name__ == '__main__':
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
     elif opt.O3:
-        # pre-train nerf
         opt.fp16 = True
         opt.cuda_ray = True
 
-        opt.dir_text = False
-        opt.bound = 16  # use a smaller bound to avoid OOM.
-        opt.h = 512  # to avoid OOM.
-        opt.w = 512
-        opt.iters = 3000
+        opt.h = 256
+        opt.w = 256
+        opt.iters = 3000  # it's enough for pre-training.
         
-        opt.max_steps = 256
-        opt.update_extra_interval = 32
-        """ tuning parameters to avoid OOM when using 512x512 resolution
-        fp16, cuda_ray, bound16, h256,  -> 35GB, ok. (Memory, quality)
-        fp16, bound16, h256, -> 16GB, noise.
-        fp16, bound16, h256, max_ray_batch=512 -> 16GB, ok.
-        fp16, cuda_ray, bound16, h256, steps=64 -> 6GB, ok?
-        fp16, cuda_ray, bound16, h512, steps=64 -> 14GB, ok?
-        fp16, cuda_ray, bound16, h512, steps=128 -> 21GB, ok.
-        fp16, cuda_ray, bound16, h512, steps=256 -> ?GB, ok.
-        fp16, cuda_ray, steps=256, inter8 -> OOM, x.
-        fp16, cuda_ray, steps=256, inter32 -> 20GB, ok.
-        fp16, cuda_ray, steps=512, inter32 -> OOM, x.
-        fp16, cuda_ray, bound16, h256, test1 -> 23GB, x.
-        fp16, cuda_ray, bound8, h256, w256 -> 28GB, x.
-        """
         if opt.nerf_transfer: # during only pretrain.
-            opt.iters = 10000            
-            workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.load_model.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+            opt.iters = 10000
+            opt.dir_text = True
+            if opt.back_view_prompt is not None:
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + f"back_view_{opt.back_view_prompt}", "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+            else:
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
     opt.workspace = workspace
-    # changed workspace based on the text prompt, sd_version, seed, and pre-train model.
     
  
     if opt.backbone == 'vanilla':
@@ -151,7 +139,7 @@ if __name__ == '__main__':
         guidance = None # no need to load guidance model at test
 
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
-
+            
         if opt.gui:
             gui = NeRFGUI(opt, trainer)
             gui.render()
@@ -186,8 +174,8 @@ if __name__ == '__main__':
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         # model.load_state_dict(torch.load(opt.load_model))
-        if opt.load_model is not None:
-            trainer.load_checkpoint(opt.load_model, model_only=True)
+        if opt.reload_model:
+            trainer.load_checkpoint(opt.pretrain_ckpt, model_only=True)
         
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer

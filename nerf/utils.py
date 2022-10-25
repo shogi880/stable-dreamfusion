@@ -223,6 +223,8 @@ class Trainer(object):
                 self.text_z = []
                 for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
                     text = f"{ref_text}, {d} view"
+                    if opt.back_view_prompt is not None and d == 'back': 
+                        text = opt.back_view_prompt
                     text_z = self.guidance.get_text_embeds([text])
                     self.text_z.append(text_z)
         else:
@@ -375,9 +377,8 @@ class Trainer(object):
         # encode pred_rgb to latents
         # _t = time.time()
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-        if self.opt.O3 and (not self.opt.nerf_transfer):
-            # print('using gt dir...')
-            # import pdb; pdb.set_trace()
+        
+        if self.opt.O3 and (not self.opt.nerf_transfer): # using mse loss for pre-training NeRF.
             loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
         else:
             loss = self.guidance.train_step(text_z, pred_rgb)
@@ -951,7 +952,7 @@ class Trainer(object):
             except:
                 self.log("[WARN] Failed to load optimizer.")
         
-        if not self.manually_lr_scheduler and self.lr_scheduler and 'lr_scheduler' in checkpoint_dict:
+        if self.lr_scheduler and 'lr_scheduler' in checkpoint_dict:
             try:
                 self.lr_scheduler.load_state_dict(checkpoint_dict['lr_scheduler'])
                 self.log("[INFO] loaded scheduler.")
