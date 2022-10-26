@@ -221,7 +221,7 @@ class Trainer(object):
 
             ref_text = self.opt.text
             if not self.opt.dir_text:
-                self.text_z = self.guidance.get_text_embeds([ref_text])    
+                self.text_z = self.guidance.get_text_embeds([ref_text])
             else:
                 self.text_z = []
                 for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
@@ -425,26 +425,37 @@ class Trainer(object):
         if self.opt.guidance != 'stable-diffusion':
             return
 
+        
+        save_image(training_views.permute(0, 3, 1, 2), os.path.join(self.workspace, 'front_views' ,f'df_{self.global_step:04d}_rgb.png'))
+        for p in self.guidance.parameters():
+            p.requires_grad = True
+                
         #text = "raccoon"
+        
         text = self.opt.subject_text
+        ref_text = None
 
         if use_dream_booth:
             # train dreambooth
-            train_dreambooth(self.guidance, text, training_views, max_train_steps=1000)
-            self.prepare_text_embeddings(self.dreambooth_ref_text)
+            train_dreambooth(self.guidance, text, training_views, max_train_steps=200)
+            ref_text = self.dreambooth_ref_text
         else:
             # train text inversion
-            train_text_inversion(self.guidance, text, training_views, max_train_steps=200)
-            self.prepare_text_embeddings(self.t_inversion_ref_text)
+            train_text_inversion(self.guidance, text, training_views, max_train_steps=1000)
+            ref_text = self.t_inversion_ref_text
+        
+        for p in self.guidance.parameters():
+            p.requires_grad = False
             
+        self.prepare_text_embeddings(ref_text)
 
     def train_step(self, data):
 
-        if self.local_step % self.opt.sd_tune_iter == 0:
+        if self.global_step > 1000 and (self.local_step + 1) % self.opt.sd_tune_iter == 0:
             # tune SD
             training_views = self.get_image_views()
+            
             self.tune_sd(training_views)
-            return
 
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]

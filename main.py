@@ -1,5 +1,6 @@
 import torch
 import argparse
+import os
 
 from nerf.provider import NeRFDataset
 from nerf.utils import *
@@ -82,7 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
     parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
     parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
-    parser.add_argument('--sd_tune_iter', type=int, default=10, help="frequency to tune SD")
+    parser.add_argument('--sd_tune_iter', type=int, default=100, help="frequency to tune SD")
 
     parser.add_argument('--subject_text', type=str, default=None, help="text for the subject")
     parser.add_argument('--classes', type=str, default=None, help="related classes")
@@ -125,7 +126,7 @@ if __name__ == '__main__':
             else:
                 workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lambda_surface_" + str(opt.lambda_surface) + "_lr_" + str(opt.lr))
     opt.workspace = workspace
-    
+    os.mkdir(os.path.join(opt.workspace, 'front_views'))
  
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
