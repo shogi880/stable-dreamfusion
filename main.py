@@ -80,8 +80,17 @@ if __name__ == '__main__':
     parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
     parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
+<<<<<<< HEAD
     parser.add_argument('--surface_grid_resolution', type=int, default=10, help="resolution of the 3d grid")
     parser.add_argument('--surface_threshold', type=float, default=3.0, help="threshold for surface")
+=======
+    parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
+    parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
+    parser.add_argument('--sd_tune_iter', type=int, default=10, help="frequency to tune SD")
+
+    parser.add_argument('--subject_text', type=str, default=None, help="text for the subject")
+    parser.add_argument('--classes', type=str, default=None, help="related classes")
+>>>>>>> 937af3f (Add dreambooth and textual inversion implementations)
     opt = parser.parse_args()
 
         
@@ -173,12 +182,14 @@ if __name__ == '__main__':
         optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
         # optimizer = lambda model: Shampoo(model.get_params(opt.lr))
 
-        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
+        train_dataset = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100)
+        few_shot_views = train_dataset.few_shot_rays
+        train_loader = train_dataset.dataloader()
 
         scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
         # scheduler = lambda optimizer: optim.lr_scheduler.OneCycleLR(optimizer, max_lr=opt.lr, total_steps=opt.iters, pct_start=0.1)
 
-        trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
+        trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True, few_shot_views=few_shot_views)
 
         # model.load_state_dict(torch.load(opt.load_model))
         if opt.reload_model:

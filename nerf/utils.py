@@ -32,6 +32,9 @@ from packaging import version as pver
 
 from torchvision.utils import save_image
 
+from dreambooth import train_dreambooth
+from t_inversion import train_text_inversion
+
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
     if pver.parse(torch.__version__) < pver.parse('1.10'):
@@ -176,6 +179,7 @@ class Trainer(object):
                  use_checkpoint="latest", # which ckpt to use at init time
                  use_tensorboardX=True, # whether to use tensorboard for logging
                  scheduler_update_every_step=False, # whether to call scheduler.step() after every train step
+                 few_shot_views=None
                  ):
         
         self.name = name
@@ -301,6 +305,7 @@ class Trainer(object):
                 self.load_checkpoint(self.use_checkpoint)
 
         self.density_function = lambda x : self.model.density(x.unsqueeze(0))['sigma'].flatten()
+        self.few_shot_views = few_shot_views
 
     
     def save_surface(self):
@@ -377,12 +382,62 @@ class Trainer(object):
         save_path = os.path.join(self.workspace, 'training', f'df_{self.global_step:04d}_rgb.png')
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         save_image(pred_rgb[0], save_path)
+
+    def get_image_views(self):
+        rays_o, rays_d, H, W = self.few_shot_views # [B, N, 3], [B, N, 3]
+        B, N = rays_o.shape[:2]
+
+        if self.global_step < self.opt.albedo_iters:
+            shading = 'albedo'
+            ambient_ratio = 1.0
+        else: 
+            rand = random.random()
+            if rand > 0.8: 
+                shading = 'albedo'
+                ambient_ratio = 1.0
+            # elif rand > 0.4: 
+            #     shading = 'textureless'
+            #     ambient_ratio = 0.1
+            else: 
+                shading = 'lambertian'
+                ambient_ratio = 0.1
+
+        
+        # _t = time.time()
+        bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
+        with torch.no_grad():
+            outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
+            pred_rgb = outputs['image'].reshape(B, H, W, 3).contiguous() # [B, H, W, 3]
+
+        return pred_rgb
     
     ### ------------------------------    
 # remotes/ashawkey/main
-    ### ------------------------------	
+    ### ------------------------------
+
+    def tune_sd(self, training_views, use_dream_booth=True):
+
+        if self.opt.guidance != 'stable-diffusion':
+            return
+
+        #text = "raccoon"
+        text = self.opt.subject_text
+
+        if use_dream_booth:
+            # train dreambooth
+            train_dreambooth(self.guidance, text, training_views, max_training_steps=1000)
+        else:
+            # train text inversion
+            train_text_inversion(self.guidance, text, training_views, max_training_steps=200)
 
     def train_step(self, data):
+
+        if self.local_step % self.opt.sd_tune_iter == 0:
+            # tune SD
+            training_views = self.get_image_views()
+            self.tune_sd(training_views)
+            return
+
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -447,7 +502,7 @@ class Trainer(object):
             new_hessians = torch.cat(new_hessians, dim=0).to(self.device)
             print(new_hessians.shape, new_hessians, self.hessians.shape, self.hessians)
             surface_loss = nn.functional.mse_loss(new_hessians, self.hessians)
-            
+
             loss = loss + self.opt.lambda_surface * surface_loss
             # 2. calucate loss with grund true imagel specific by the ray.
             

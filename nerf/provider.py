@@ -171,11 +171,29 @@ class NeRFDataset:
         # [debug] visualize poses
         # poses, dirs = rand_poses(100, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
         # visualize_poses(poses.detach().cpu().numpy())
-
+        self.few_shot_rays = None
         if self.opt.O3:
             self.images_dir = os.path.join(self.opt.gt_dir, 'images')
             self.poses_dir = os.path.join(self.opt.gt_dir, 'poses')
             self.num_data =  len(os.listdir(self.images_dir))
+
+            few_shot_poses = []
+            view_indices = [0, 5, 10, 15, 20, 80, 85, 90, 95]
+            for i in view_indices:
+                full_pose_path = os.path.join(self.poses_dir, '%04d.txt' % i)
+                pose = torch.from_numpy(np.expand_dims(np.loadtxt(full_pose_path), 0).astype(np.float32)).to(self.device)
+                self.few_shot_views.append(pose)
+            few_shot_poses = torch.cat(self.few_shot_views, dim=0)
+            fov = 50
+            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+            intrinsics = np.array([focal, focal, self.cx, self.cy])
+            rays = get_rays(few_shot_poses, intrinsics, self.H, self.W, -1)
+            rays_o = rays['rays_o']
+            rays_d = rays['rays_d']
+
+            self.few_shot_rays = (rays_o, rays_d, self.H, self.W)
+                
+
 
 
     def collate(self, index):
