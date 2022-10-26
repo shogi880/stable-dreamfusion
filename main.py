@@ -59,10 +59,10 @@ if __name__ == '__main__':
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
-    parser.add_argument('--lambda_opacity', type=float, default=3e-3, help="loss scale for alpha value")
+    parser.add_argument('--lambda_opacity', type=float, default=1e-4, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
-    parser.add_argument('--lambda_surface', type=float, default=1e-2, help="loss scale for surface preservation")
+    # parser.add_argument('--lambda_surface', type=float, default=1e-2, help="loss scale for surface preservation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -75,22 +75,26 @@ if __name__ == '__main__':
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
     
     ### additional options
-    parser.add_argument('--nerf_transfer', action="store_true", help="transfer nerf from pre-trained nerf")
+    # parser.add_argument('--nerf_transfer', action="store_true", help="transfer nerf from pre-trained nerf")
     parser.add_argument('--gt_dir', type=str, default="dataset/pose_2", help='path to gt data')
     parser.add_argument('--pretrain_ckpt', type=str, default=None, help="use image guidance instead of text guidance")
     parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
-    parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
+    # parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-    parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
-    parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
+    # parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
+    # parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
     parser.add_argument('--sd_tune_iter', type=int, default=100, help="frequency to tune SD")
 
     parser.add_argument('--subject_text', type=str, default=None, help="text for the subject")
-    parser.add_argument('--classes', type=str, default=None, help="related classes")
+    # parser.add_argument('--classes', type=str, default=None, help="related classes")
+    
+    # parser.add_argument('--use_t_inversion', action='store_true', help="start a GUI")
+    parser.add_argument('--transfer_type', type=str, default=None, help="select from [t_inversion, dream_booth, original]")
+    
     opt = parser.parse_args()
 
         
-    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed) + "lambda_surface" + str(opt.lambda_surface))
+    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + "_seed_" + str(opt.seed))
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
@@ -113,20 +117,18 @@ if __name__ == '__main__':
     elif opt.O3:
         opt.fp16 = True
         opt.cuda_ray = True
-
+        opt.save_mesh = True
+        
         opt.h = 256
         opt.w = 256
         opt.iters = 3000  # it's enough for pre-training.
-        # opt.max_steps = 128
-        if opt.nerf_transfer: # during only pretrain.
+        
+        if opt.transfer_type is not None: # during only pretrain.
             opt.iters = 10000
             opt.dir_text = True
-            if opt.back_view_prompt is not None:
-                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + f"back_view_{opt.back_view_prompt}", "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lambda_surface_" + str(opt.lambda_surface) + "_lr_" + str(opt.lr))
-            else:
-                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lambda_surface_" + str(opt.lambda_surface) + "_lr_" + str(opt.lr))
+            workspace = os.path.join(workspace, opt.transfer_type + "_" + opt.pretrain_ckpt.split('/')[-1].split('.')[0] + "_lr_" + str(opt.lr) + "_iters_" + str(opt.iters))
     opt.workspace = workspace
-    os.mkdir(os.path.join(opt.workspace, 'front_views'))
+    
  
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork

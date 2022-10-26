@@ -120,8 +120,8 @@ class StableDiffusion(nn.Module):
             pass
         
         # w(t), sigma_t^2
-        w = (1 - self.alphas[t])
-        # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
+        # w = (1 - self.alphas[t])
+        w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?

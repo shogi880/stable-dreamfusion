@@ -211,28 +211,16 @@ class Trainer(object):
 
         # guide model
         self.guidance = guidance
-
-        # text prompt
+        
         if self.guidance is not None:
             
             for p in self.guidance.parameters():
                 p.requires_grad = False
 
-
-            ref_text = self.opt.text
-            if not self.opt.dir_text:
-                self.text_z = self.guidance.get_text_embeds([ref_text])
-            else:
-                self.text_z = []
-                for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
-                    text = f"{ref_text}, {d} view"
-                    if opt.back_view_prompt is not None and d == 'back': 
-                        text = opt.back_view_prompt
-                    text_z = self.guidance.get_text_embeds([text])
-                    self.text_z.append(text_z)
+            self.prepare_text_embeddings(self.opt.text)
         else:
             self.text_z = None
-    
+
         if isinstance(criterion, nn.Module):
             criterion.to(self.device)
         self.criterion = criterion
@@ -307,33 +295,10 @@ class Trainer(object):
         self.density_function = lambda x : self.model.density(x.unsqueeze(0))['sigma'].flatten()
         self.few_shot_views = few_shot_views
 
-        text = self.opt.subject_text
-        self.dreambooth_ref_text = self.opt.text.replace(text, f'sks {text}')
-        self.t_inversion_ref_text = self.opt.text.replace(text, f'<{text}>')
-
-
-    
-    # def save_surface(self):
-    #     b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
-    #     x, y, z = torch.meshgrid(b, b, b, indexing='ij')
-    #     grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3).to(self.device)
-
-    #     densities = self.model.density(grid_3d)['sigma']
-    #     # import ipdb; ipdb.set_trace()
-    #     # print(densities['sigma'].shape)
-    #     filter_idx = densities > self.opt.surface_threshold
-    #     filtered_grid = grid_3d[filter_idx]
-
-    #     hessians = []
-
-    #     for p in filtered_grid:
-    #         h = hessian(self.density_function, p)
-    #         hessians.append(h.unsqueeze(0))
-
-    #     self.filtered_grid = filtered_grid
-    #     self.hessians = torch.cat(hessians, dim=0).to(self.device)
-
-
+        if self.opt.transfer_type in ['t_inversion', 'dream_booth']:
+            text = self.opt.subject_text
+            self.dreambooth_ref_text = self.opt.text.replace(text, f'sks {text}')
+            self.t_inversion_ref_text = self.opt.text.replace(text, f'<{text}>')
 
     # calculate the text embs.
     def prepare_text_embeddings(self, text):
@@ -416,33 +381,26 @@ class Trainer(object):
 
         return pred_rgb
     
-    ### ------------------------------    
-# remotes/ashawkey/main
-    ### ------------------------------
-
-    def tune_sd(self, training_views, use_dream_booth=True):
+    def tune_sd(self, training_views, transfer_type):
 
         if self.opt.guidance != 'stable-diffusion':
             return
-
         
         save_image(training_views.permute(0, 3, 1, 2), os.path.join(self.workspace, 'front_views' ,f'df_{self.global_step:04d}_rgb.png'))
         for p in self.guidance.parameters():
             p.requires_grad = True
-                
-        #text = "raccoon"
-        
+                        
         text = self.opt.subject_text
         ref_text = None
 
-        if use_dream_booth:
-            # train dreambooth
+        if transfer_type == 't_inversion':
+            train_text_inversion(self.guidance, text, training_views, max_train_steps=1000)
+            ref_text = self.t_inversion_ref_text
+        elif transfer_type == 'dream_booth':# train dreambooth
             train_dreambooth(self.guidance, text, training_views, max_train_steps=200)
             ref_text = self.dreambooth_ref_text
         else:
-            # train text inversion
-            train_text_inversion(self.guidance, text, training_views, max_train_steps=1000)
-            ref_text = self.t_inversion_ref_text
+            raise NotImplementedError
         
         for p in self.guidance.parameters():
             p.requires_grad = False
@@ -451,11 +409,11 @@ class Trainer(object):
 
     def train_step(self, data):
 
-        if self.global_step > 1000 and (self.local_step + 1) % self.opt.sd_tune_iter == 0:
+        if (self.opt.transfer_type in ['t_inversion', 'dream_booth']) and (self.global_step > 1000) and (self.local_step + 1) % self.opt.sd_tune_iter == 0:
             # tune SD
             training_views = self.get_image_views()
             
-            self.tune_sd(training_views)
+            self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
 
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
@@ -507,25 +465,11 @@ class Trainer(object):
         # _t = time.time()
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
         
-        if self.opt.O3 and (not self.opt.nerf_transfer): # using mse loss for pre-training NeRF.
+        if self.opt.O3 and (self.opt.transfer_type is None): # using mse loss for pre-training NeRF.
             loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
         else:
             loss = self.guidance.train_step(text_z, pred_rgb)
-
-            # new_hessians = []
-            # for p in self.filtered_grid:
-            #     # print("calculating hessian...")
-            #     h = hessian(self.density_function, p, create_graph=True)
-            #     new_hessians.append(h.unsqueeze(0))
-
-            # new_hessians = torch.cat(new_hessians, dim=0).to(self.device)
-            # # print(new_hessians.shape, new_hessians, self.hessians.shape, self.hessians)
-            # surface_loss = nn.functional.mse_loss(new_hessians, self.hessians)
-
-            # loss = loss + self.opt.lambda_surface * surface_loss
-            # 2. calucate loss with grund true imagel specific by the ray.
-            
-            
+ 
         # occupancy loss
         pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
 
@@ -624,6 +568,9 @@ class Trainer(object):
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))
+        
+        os.makedirs(os.path.join(self.opt.workspace, 'front_views'), exist_ok=True)
+        
 
         start_t = time.time()
         
@@ -646,6 +593,7 @@ class Trainer(object):
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer.close()
 
+        
     def evaluate(self, loader, name=None):
         self.use_tensorboardX, use_tensorboardX = False, self.use_tensorboardX
         self.evaluate_one_epoch(loader, name)
