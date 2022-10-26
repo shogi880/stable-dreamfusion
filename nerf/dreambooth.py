@@ -84,8 +84,8 @@ class DreamBoothDataset(Dataset):
 
     def __getitem__(self, index):
         example = {}
-        instance_image = self.instance_data[index % self.num_instance_images]
-        example["instance_images"] = self.image_transforms(Image.fromarray(np.array(instance_image * 255)))
+        instance_image = self.instance_data[index % self.num_instance_images].cpu()
+        example["instance_images"] = self.image_transforms(Image.fromarray(np.array(instance_image * 255).astype(np.uint8)))
         example["instance_prompt_ids"] = self.tokenizer(
             self.instance_prompt,
             padding="do_not_pad",

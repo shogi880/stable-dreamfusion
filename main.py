@@ -58,7 +58,7 @@ if __name__ == '__main__':
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
-    parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
+    parser.add_argument('--lambda_opacity', type=float, default=3e-3, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
     parser.add_argument('--lambda_surface', type=float, default=1e-2, help="loss scale for surface preservation")
@@ -80,17 +80,12 @@ if __name__ == '__main__':
     parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
     parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-<<<<<<< HEAD
-    parser.add_argument('--surface_grid_resolution', type=int, default=10, help="resolution of the 3d grid")
-    parser.add_argument('--surface_threshold', type=float, default=3.0, help="threshold for surface")
-=======
     parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
     parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
     parser.add_argument('--sd_tune_iter', type=int, default=10, help="frequency to tune SD")
 
     parser.add_argument('--subject_text', type=str, default=None, help="text for the subject")
     parser.add_argument('--classes', type=str, default=None, help="related classes")
->>>>>>> 937af3f (Add dreambooth and textual inversion implementations)
     opt = parser.parse_args()
 
         
@@ -194,7 +189,6 @@ if __name__ == '__main__':
         # model.load_state_dict(torch.load(opt.load_model))
         if opt.reload_model:
             trainer.load_checkpoint(opt.pretrain_ckpt, model_only=True)
-            trainer.save_surface()
         
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer

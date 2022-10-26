@@ -32,8 +32,8 @@ from packaging import version as pver
 
 from torchvision.utils import save_image
 
-from dreambooth import train_dreambooth
-from t_inversion import train_text_inversion
+from .dreambooth import train_dreambooth
+from .t_inversion import train_text_inversion
 
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
@@ -313,25 +313,25 @@ class Trainer(object):
 
 
     
-    def save_surface(self):
-        b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
-        x, y, z = torch.meshgrid(b, b, b, indexing='ij')
-        grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3).to(self.device)
+    # def save_surface(self):
+    #     b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
+    #     x, y, z = torch.meshgrid(b, b, b, indexing='ij')
+    #     grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3).to(self.device)
 
-        densities = self.model.density(grid_3d)['sigma']
-        # import ipdb; ipdb.set_trace()
-        # print(densities['sigma'].shape)
-        filter_idx = densities > self.opt.surface_threshold
-        filtered_grid = grid_3d[filter_idx]
+    #     densities = self.model.density(grid_3d)['sigma']
+    #     # import ipdb; ipdb.set_trace()
+    #     # print(densities['sigma'].shape)
+    #     filter_idx = densities > self.opt.surface_threshold
+    #     filtered_grid = grid_3d[filter_idx]
 
-        hessians = []
+    #     hessians = []
 
-        for p in filtered_grid:
-            h = hessian(self.density_function, p)
-            hessians.append(h.unsqueeze(0))
+    #     for p in filtered_grid:
+    #         h = hessian(self.density_function, p)
+    #         hessians.append(h.unsqueeze(0))
 
-        self.filtered_grid = filtered_grid
-        self.hessians = torch.cat(hessians, dim=0).to(self.device)
+    #     self.filtered_grid = filtered_grid
+    #     self.hessians = torch.cat(hessians, dim=0).to(self.device)
 
 
 
@@ -430,11 +430,11 @@ class Trainer(object):
 
         if use_dream_booth:
             # train dreambooth
-            train_dreambooth(self.guidance, text, training_views, max_training_steps=1000)
+            train_dreambooth(self.guidance, text, training_views, max_train_steps=1000)
             self.prepare_text_embeddings(self.dreambooth_ref_text)
         else:
             # train text inversion
-            train_text_inversion(self.guidance, text, training_views, max_training_steps=200)
+            train_text_inversion(self.guidance, text, training_views, max_train_steps=200)
             self.prepare_text_embeddings(self.t_inversion_ref_text)
             
 
@@ -501,17 +501,17 @@ class Trainer(object):
         else:
             loss = self.guidance.train_step(text_z, pred_rgb)
 
-            new_hessians = []
-            for p in self.filtered_grid:
-                # print("calculating hessian...")
-                h = hessian(self.density_function, p, create_graph=True)
-                new_hessians.append(h.unsqueeze(0))
+            # new_hessians = []
+            # for p in self.filtered_grid:
+            #     # print("calculating hessian...")
+            #     h = hessian(self.density_function, p, create_graph=True)
+            #     new_hessians.append(h.unsqueeze(0))
 
-            new_hessians = torch.cat(new_hessians, dim=0).to(self.device)
-            print(new_hessians.shape, new_hessians, self.hessians.shape, self.hessians)
-            surface_loss = nn.functional.mse_loss(new_hessians, self.hessians)
+            # new_hessians = torch.cat(new_hessians, dim=0).to(self.device)
+            # # print(new_hessians.shape, new_hessians, self.hessians.shape, self.hessians)
+            # surface_loss = nn.functional.mse_loss(new_hessians, self.hessians)
 
-            loss = loss + self.opt.lambda_surface * surface_loss
+            # loss = loss + self.opt.lambda_surface * surface_loss
             # 2. calucate loss with grund true imagel specific by the ray.
             
             

@@ -128,7 +128,7 @@ class TextualInversionDataset(Dataset):
 
     def __getitem__(self, i):
         example = {}
-        image = self.data[i % self.num_images]
+        image = self.data[i % self.num_images].cpu()
 
         placeholder_string = self.placeholder_token
         text = random.choice(self.templates).format(placeholder_string)
