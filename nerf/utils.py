@@ -307,6 +307,11 @@ class Trainer(object):
         self.density_function = lambda x : self.model.density(x.unsqueeze(0))['sigma'].flatten()
         self.few_shot_views = few_shot_views
 
+        text = self.opt.subject_text
+        self.dreambooth_ref_text = self.opt.text.replace(text, f'sks {text}')
+        self.t_inversion_ref_text = self.opt.text.replace(text, f'<{text}>')
+
+
     
     def save_surface(self):
         b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
@@ -331,15 +336,15 @@ class Trainer(object):
 
 
     # calculate the text embs.
-    def prepare_text_embeddings(self):
+    def prepare_text_embeddings(self, text):
 
-        if self.opt.text is None:
+        if text is None:
             self.log(f"[WARN] text prompt is not provided.")
             self.text_z = None
             return
 
         if not self.opt.dir_text:
-            self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
+            self.text_z = self.guidance.get_text_embeds([text], [self.opt.negative])
         else:
             self.text_z = []
             for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
@@ -426,9 +431,12 @@ class Trainer(object):
         if use_dream_booth:
             # train dreambooth
             train_dreambooth(self.guidance, text, training_views, max_training_steps=1000)
+            self.prepare_text_embeddings(self.dreambooth_ref_text)
         else:
             # train text inversion
             train_text_inversion(self.guidance, text, training_views, max_training_steps=200)
+            self.prepare_text_embeddings(self.t_inversion_ref_text)
+            
 
     def train_step(self, data):
 
