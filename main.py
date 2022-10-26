@@ -61,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
-    parser.add_argument('--lambda_surface', type=float, default=1e-1, help="loss scale for surface preservation")
+    parser.add_argument('--lambda_surface', type=float, default=1e-2, help="loss scale for surface preservation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -80,12 +80,12 @@ if __name__ == '__main__':
     parser.add_argument('--reload_model', action="store_true", help="restart the whole training process")
     parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-    parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
-    parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
+    parser.add_argument('--surface_grid_resolution', type=int, default=10, help="resolution of the 3d grid")
+    parser.add_argument('--surface_threshold', type=float, default=3.0, help="threshold for surface")
     opt = parser.parse_args()
 
         
-    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed))
+    workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "seed_"+str(opt.seed) + "lambda_surface" + str(opt.lambda_surface))
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
@@ -112,14 +112,14 @@ if __name__ == '__main__':
         opt.h = 256
         opt.w = 256
         opt.iters = 3000  # it's enough for pre-training.
-        
+        # opt.max_steps = 128
         if opt.nerf_transfer: # during only pretrain.
             opt.iters = 10000
             opt.dir_text = True
             if opt.back_view_prompt is not None:
-                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + f"back_view_{opt.back_view_prompt}", "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_') + f"back_view_{opt.back_view_prompt}", "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lambda_surface_" + str(opt.lambda_surface) + "_lr_" + str(opt.lr))
             else:
-                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lr_" + str(opt.lr))
+                workspace = os.path.join(opt.workspace, opt.text.replace(' ', '_'), "transfer_"+opt.pretrain_ckpt.split('/')[-1].split('.')[0] , opt.sd_version + "seed_"+str(opt.seed) + "_lambda_surface_" + str(opt.lambda_surface) + "_lr_" + str(opt.lr))
     opt.workspace = workspace
     
  

@@ -39,14 +39,16 @@ class StableDiffusion(nn.Module):
         print(f'[INFO] loading stable diffusion...')
         # 1. Load the autoencoder model which will be used to decode the latents into image space. 
 
-        self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
+        # self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
+        self.vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_auth_token=self.token).to(self.device)
 
         # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
         self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
         self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
 
         # 3. The UNet model for generating the latents.
-        self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
+        # self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
+        self.unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet", use_auth_token=self.token).to(self.device)
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
@@ -56,7 +58,7 @@ class StableDiffusion(nn.Module):
         self.counter = 0
         self.workspace = opt.workspace
 
-    def get_text_embeds(self, prompt, negative_prompt):
+    def get_text_embeds(self, prompt, negative_prompt=" "):
         # prompt, negative_prompt: [str]
 
         # Tokenize text and get embeddings

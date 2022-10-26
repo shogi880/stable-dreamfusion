@@ -215,6 +215,7 @@ class Trainer(object):
                 p.requires_grad = False
 
 
+            ref_text = self.opt.text
             if not self.opt.dir_text:
                 self.text_z = self.guidance.get_text_embeds([ref_text])    
             else:
@@ -305,9 +306,11 @@ class Trainer(object):
     def save_surface(self):
         b = torch.linspace(-self.opt.bound, self.opt.bound, self.opt.surface_grid_resolution)
         x, y, z = torch.meshgrid(b, b, b, indexing='ij')
-        grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3)
+        grid_3d = torch.cat([x[...,None], y[...,None], z[...,None]], dim=-1).reshape(-1, 3).to(self.device)
 
-        densities = self.model.density(grid_3d)
+        densities = self.model.density(grid_3d)['sigma']
+        # import ipdb; ipdb.set_trace()
+        # print(densities['sigma'].shape)
         filter_idx = densities > self.opt.surface_threshold
         filtered_grid = grid_3d[filter_idx]
 
@@ -318,7 +321,7 @@ class Trainer(object):
             hessians.append(h.unsqueeze(0))
 
         self.filtered_grid = filtered_grid
-        self.hessians = torch.cat(hessians, dim=0)
+        self.hessians = torch.cat(hessians, dim=0).to(self.device)
 
 
 
@@ -437,11 +440,14 @@ class Trainer(object):
 
             new_hessians = []
             for p in self.filtered_grid:
+                # print("calculating hessian...")
                 h = hessian(self.density_function, p, create_graph=True)
                 new_hessians.append(h.unsqueeze(0))
 
-            new_hessians = torch.cat(new_hessians, dim=0)
-            surface_loss = nn.functional.mse_loss(new_hessians, self.hessian)
+            new_hessians = torch.cat(new_hessians, dim=0).to(self.device)
+            print(new_hessians.shape, new_hessians, self.hessians.shape, self.hessians)
+            surface_loss = nn.functional.mse_loss(new_hessians, self.hessians)
+            
             loss = loss + self.opt.lambda_surface * surface_loss
             # 2. calucate loss with grund true imagel specific by the ray.
             
