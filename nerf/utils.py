@@ -396,7 +396,7 @@ class Trainer(object):
         if transfer_type == 't_inversion':
             train_text_inversion(self.guidance, text, training_views, max_train_steps=1000)
             ref_text = self.t_inversion_ref_text
-        elif transfer_type == 'dream_booth':# train dreambooth
+        elif transfer_type == 'dream_booth': # train dreambooth
             train_dreambooth(self.guidance, text, training_views, max_train_steps=200)
             ref_text = self.dreambooth_ref_text
         else:
@@ -414,6 +414,10 @@ class Trainer(object):
             training_views = self.get_image_views()
             
             self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
+            images = self.guidance.prompt_to_img(self.dreambooth_ref_text)
+
+            for i, image in enumerate(images):
+                image.save('dreambooth_tmp.png')
 
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
