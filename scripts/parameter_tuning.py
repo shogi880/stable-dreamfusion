@@ -36,7 +36,7 @@ def run_command(cmd):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--tune', default=None, help="select one parameter to tune")
-    parser.add_argument('--sd_version', default="", help="select one parameter to tune")
+    parser.add_argument('--sd_version', default="CompVis", help="select one parameter to tune")
     opt = parser.parse_args()
     
     base_cmd = 'python main.py --pretrain_ckpt ./pretrain_models/pose_1_0050.pth --transfer_type "dream_booth"'
@@ -45,5 +45,5 @@ if __name__ == "__main__":
     for num in parameter_dict[opt.tune]:
         cmd_list = [base_cmd + f' --{opt.tune} {str(num)}' + f' --workspace {workspace} --sd_version {opt.sd_version}']
         for cmd in cmd_list:
-            print(cmd)
-            # run_command(cmd)
+            # print(cmd)
+            run_command(cmd)
