@@ -94,10 +94,11 @@ if __name__ == '__main__':
     # parser.add_argument('--classes', type=str, default=None, help="related classes")
     
     parser.add_argument('--transfer_type', type=str, default=None, help="select from [t_inversion, dream_booth, original]")
+    parser.add_argument('--ex_name', type=str, default=None, help="create experiment log folder")
     
     opt = parser.parse_args()
 
-        
+    
     workspace = os.path.join(opt.workspace, f'{opt.text.replace(" ", "_")}_subject_{opt.subject_text}_seed_{opt.seed}', f'lambda_entropy_{opt.lambda_entropy}_opacity_{opt.lambda_opacity}_orient{opt.lambda_orient}_smooth_{opt.lambda_smooth}')
     
     if opt.O:
