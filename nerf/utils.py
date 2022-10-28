@@ -429,7 +429,8 @@ class Trainer(object):
             images = self.guidance.prompt_to_img(self.dreambooth_ref_text)
 
             for i, image in enumerate(images):
-                image.save(f'{self.opt.workspace}/dreambooth_tmp_{i}.png')
+                print(f'{self.opt.workspace}/dreambooth_tmp_{i}.png')
+                Image.fromarray(image).save(f'{self.opt.workspace}/dreambooth_tmp_{i}.png')
 
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
