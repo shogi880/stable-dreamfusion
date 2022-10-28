@@ -31,9 +31,10 @@ from torch_ema import ExponentialMovingAverage
 from packaging import version as pver
 
 from torchvision.utils import save_image
-
+from torchvision import transforms
 from .dreambooth import train_dreambooth
 from .t_inversion import train_text_inversion
+from PIL import Image
 
 def custom_meshgrid(*args):
     # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
@@ -353,7 +354,9 @@ class Trainer(object):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         save_image(pred_rgb[0], save_path)
 
-    def get_image_views(self):
+    def get_image_views(self, img_source='nerf'):
+        
+
         rays_o, rays_d, H, W = self.few_shot_views # [B, N, 3], [B, N, 3]
         B, N = rays_o.shape[:2]
 
@@ -372,7 +375,7 @@ class Trainer(object):
                 shading = 'lambertian'
                 ambient_ratio = 0.1
 
-        
+        import ipdb; ipdb.set_trace()
         # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         with torch.no_grad():
@@ -394,10 +397,10 @@ class Trainer(object):
         ref_text = None
 
         if transfer_type == 't_inversion':
-            train_text_inversion(self.guidance, text, training_views, max_train_steps=1000)
+            train_text_inversion(self.guidance, text, training_views, max_train_steps=self.opt.sd_tune_step)
             ref_text = self.t_inversion_ref_text
         elif transfer_type == 'dream_booth':# train dreambooth
-            train_dreambooth(self.guidance, text, training_views, max_train_steps=200)
+            train_dreambooth(self.guidance, text, training_views, max_train_steps=self.opt.sd_tune_step)
             ref_text = self.dreambooth_ref_text
         else:
             raise NotImplementedError
@@ -407,13 +410,29 @@ class Trainer(object):
             
         self.prepare_text_embeddings(ref_text)
 
+    def load_gt_images(self, path):
+        images = []
+        for img in os.listdir(path):
+            img_tensor = transforms.ToTensor()(Image.open(os.path.join(path, img)).resize((256, 256))).unsqueeze(0)
+            if img_tensor.shape[1] != 3:
+                img_tensor = img_tensor[:, :3, :, :]
+            images.append(img_tensor)
+        images = torch.concat(images, dim=0).to(self.device).permute(0, 2, 3, 1)  # since we apply permute(0, 3, 1, 2) in the forward pass
+        return images
+    
     def train_step(self, data):
-
-        if (self.opt.transfer_type in ['t_inversion', 'dream_booth']) and (self.global_step > 1000) and (self.local_step + 1) % self.opt.sd_tune_iter == 0:
-            # tune SD
-            training_views = self.get_image_views()
-            
+        # if self.global_step == 0:
+        if self.opt.tune_sd_at_start and self.global_step == 1:
+            training_views = self.load_gt_images(self.opt.gt_images_path)
+        
             self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
+            print("finished tuning sd, start general training...")
+        
+        # if (self.opt.transfer_type in ['t_inversion', 'dream_booth']) and (self.global_step > self.opt.sd_tune_at_n_iter) and (self.local_step + 1) % self.opt.sd_tune_iter == 0:
+        #     # tune SD
+        #     training_views = self.get_image_views()
+            
+        #     self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
 
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]

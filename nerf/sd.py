@@ -1,5 +1,5 @@
 from transformers import CLIPTextModel, CLIPTokenizer, logging
-from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler
+from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DiffusionPipeline
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -39,8 +39,21 @@ class StableDiffusion(nn.Module):
         print(f'[INFO] loading stable diffusion...')
         # 1. Load the autoencoder model which will be used to decode the latents into image space. 
 
-        # self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
-        self.vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_auth_token=self.token).to(self.device)
+        if opt.sd_version == 'CompVis':
+            self.vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_auth_token=self.token).to(self.device)
+        elif opt.sd_version == 'waifu':
+            self.vae = AutoencoderKL.from_pretrained("hakurei/waifu-diffusion", subfolder="vae", use_auth_token=self.token).to(self.device)
+        elif opt.sd_version == 'disney':
+            import ipdb; ipdb.set_trace()
+            from diffusers import DiffusionPipeline
+            # generator = DiffusionPipeline.from_pretrained("./pretrain_models/modern-disney-diffusion" ).to(self.device)
+            model = DiffusionPipeline.from_pretrained("./pretrain_models/modern-disney-diffusion/modernDisney-v1-pruned.ckpt")
+            model.save_pretrained("modern-disney")
+            pl_sd = torch.load('./pretrain_models/modern-disney-diffusion/modernDisney-v1-pruned.ckpt', map_location="cpu")
+            # generator = AutoencoderKL.from_pretrained("./pretrain_models/modernDisney-v1-pruned.ckpt", subfolder="vae").to(self.device)
+            # self.vae = AutoencoderKL.from_pretrained("nitrosocke/modern-disney-diffusion", subfolder="vae", use_auth_token=self.token).to(self.device)
+            
+            
 
         # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
         self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
@@ -48,7 +61,12 @@ class StableDiffusion(nn.Module):
 
         # 3. The UNet model for generating the latents.
         # self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
-        self.unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet", use_auth_token=self.token).to(self.device)
+        if opt.sd_version == 'CompVis':
+            self.unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet", use_auth_token=self.token).to(self.device)
+        elif opt.sd_version == 'waifu':
+            self.unet = UNet2DConditionModel.from_pretrained("hakurei/waifu-diffusion", subfolder="unet", use_auth_token=self.token).to(self.device)
+        elif opt.sd_version == 'disney':
+            self.unet = UNet2DConditionModel.from_pretrained("nitrosocke/modern-disney-diffusion", subfolder="unet", use_auth_token=self.token).to(self.device)
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
@@ -120,8 +138,8 @@ class StableDiffusion(nn.Module):
             pass
         
         # w(t), sigma_t^2
-        # w = (1 - self.alphas[t])
-        w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
+        w = (1 - self.alphas[t])
+        # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?

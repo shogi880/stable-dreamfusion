@@ -180,17 +180,17 @@ def train_text_inversion(guidance, text, image_views, max_train_steps=3000):
     placeholder_token = f"<{text}>"
     
     # A word that can summarise what your new concept is, to be used as a starting point
-    initializer_token = "person"
+    initializer_token = text
 
 
     tokenizer = guidance.tokenizer
 
-    num_added_tokens = tokenizer.add_tokens(placeholder_token)
-    if num_added_tokens == 0:
-        raise ValueError(
-            f"The tokenizer already contains the token {placeholder_token}. Please pass a different"
-            " `placeholder_token` that is not already in the tokenizer."
-        )
+    # num_added_tokens = tokenizer.add_tokens(placeholder_token)
+    # if num_added_tokens == 0:
+    #     raise ValueError(
+    #         f"The tokenizer already contains the token {placeholder_token}. Please pass a different"
+    #         " `placeholder_token` that is not already in the tokenizer."
+    #     )
 
     token_ids = tokenizer.encode(initializer_token, add_special_tokens=False)
     if len(token_ids) > 1:

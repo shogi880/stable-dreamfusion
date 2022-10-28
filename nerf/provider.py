@@ -172,13 +172,13 @@ class NeRFDataset:
         # poses, dirs = rand_poses(100, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
         # visualize_poses(poses.detach().cpu().numpy())
         self.few_shot_rays = None
-        if self.opt.O3:
+        if self.opt.transfer_type is not None:
             self.images_dir = os.path.join(self.opt.gt_dir, 'images')
             self.poses_dir = os.path.join(self.opt.gt_dir, 'poses')
             self.num_data =  len(os.listdir(self.images_dir))
 
             few_shot_views = []
-            view_indices = [0, 5, 10, 15, 20, 80, 85, 90, 95]
+            view_indices = [0, 10, 20, 30, 70, 80, 90]
             for i in view_indices:
                 full_pose_path = os.path.join(self.poses_dir, '%04d.txt' % i)
                 pose = torch.from_numpy(np.expand_dims(np.loadtxt(full_pose_path), 0).astype(np.float32)).to(self.device)
