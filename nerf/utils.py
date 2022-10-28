@@ -296,6 +296,8 @@ class Trainer(object):
         self.density_function = lambda x : self.model.density(x.unsqueeze(0))['sigma'].flatten()
         self.few_shot_views = few_shot_views
 
+        self.normalize = lambda x : (x - 0.5) * 2
+
         if self.opt.transfer_type in ['t_inversion', 'dream_booth']:
             text = self.opt.subject_text
             self.dreambooth_ref_text = self.opt.text.replace(text, f'sks {text}')
@@ -380,7 +382,7 @@ class Trainer(object):
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         with torch.no_grad():
             outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
-            pred_rgb = outputs['image'].reshape(B, H, W, 3).contiguous() # [B, H, W, 3]
+            pred_rgb = self.normalize(outputs['image'].reshape(B, H, W, 3).contiguous()) # [B, H, W, 3]
 
         return pred_rgb
     
@@ -417,7 +419,7 @@ class Trainer(object):
             if img_tensor.shape[1] != 3:
                 img_tensor = img_tensor[:, :3, :, :]
             images.append(img_tensor)
-        images = torch.concat(images, dim=0).to(self.device).permute(0, 2, 3, 1)  # since we apply permute(0, 3, 1, 2) in the forward pass
+        images = self.normalize(torch.concat(images, dim=0).to(self.device).permute(0, 2, 3, 1))  # since we apply permute(0, 3, 1, 2) in the forward pass
         return images
     
     def train_step(self, data):
