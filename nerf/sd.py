@@ -44,17 +44,8 @@ class StableDiffusion(nn.Module):
         elif opt.sd_version == 'waifu':
             self.vae = AutoencoderKL.from_pretrained("hakurei/waifu-diffusion", subfolder="vae", use_auth_token=self.token).to(self.device)
         elif opt.sd_version == 'disney':
-            import ipdb; ipdb.set_trace()
-            from diffusers import DiffusionPipeline
-            # generator = DiffusionPipeline.from_pretrained("./pretrain_models/modern-disney-diffusion" ).to(self.device)
-            model = DiffusionPipeline.from_pretrained("./pretrain_models/modern-disney-diffusion/modernDisney-v1-pruned.ckpt")
-            model.save_pretrained("modern-disney")
-            pl_sd = torch.load('./pretrain_models/modern-disney-diffusion/modernDisney-v1-pruned.ckpt', map_location="cpu")
-            # generator = AutoencoderKL.from_pretrained("./pretrain_models/modernDisney-v1-pruned.ckpt", subfolder="vae").to(self.device)
-            # self.vae = AutoencoderKL.from_pretrained("nitrosocke/modern-disney-diffusion", subfolder="vae", use_auth_token=self.token).to(self.device)
+            self.vae = AutoencoderKL.from_pretrained("pretrain_models/modern-disney-diffusion", subfolder="vae", use_auth_token=self.token).to(self.device)
             
-            
-
         # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
         self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
         self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
@@ -66,7 +57,7 @@ class StableDiffusion(nn.Module):
         elif opt.sd_version == 'waifu':
             self.unet = UNet2DConditionModel.from_pretrained("hakurei/waifu-diffusion", subfolder="unet", use_auth_token=self.token).to(self.device)
         elif opt.sd_version == 'disney':
-            self.unet = UNet2DConditionModel.from_pretrained("nitrosocke/modern-disney-diffusion", subfolder="unet", use_auth_token=self.token).to(self.device)
+            self.unet = UNet2DConditionModel.from_pretrained("pretrain_models/modern-disney-diffusion", subfolder="unet", use_auth_token=self.token).to(self.device)
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
@@ -153,7 +144,7 @@ class StableDiffusion(nn.Module):
         return 0 # dummy loss value
 
     def produce_latents(self, text_embeddings, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, latents=None):
-
+        # import ipdb; ipdb.set_trace()
         if latents is None:
             latents = torch.randn((text_embeddings.shape[0] // 2, self.unet.in_channels, height // 8, width // 8), device=self.device)
 

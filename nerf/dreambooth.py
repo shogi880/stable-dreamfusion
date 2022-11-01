@@ -23,10 +23,6 @@ from tqdm.auto import tqdm
 import bitsandbytes as bnb
 from argparse import Namespace
 
-num_class_images = 12 
-sample_batch_size = 2
-prior_loss_weight = 0.5
-prior_preservation_class_folder = "./class_images"
 
 # Advanced settings for prior preservation (optional)
 num_class_images = 12
@@ -122,15 +118,14 @@ class PromptDataset(Dataset):
         example["index"] = index
         return example
 
-
-def train_dreambooth(guidance, text, image_views, max_train_steps=450):
+def train_dreambooth(guidance, text, image_views, tmp_logs, max_train_steps=450):
 
     # Settings for your newly created concept
     # `instance_prompt` is a prompt that should contain a good description of what your object or style is, together with the initializer word `sks`
-    instance_prompt = f"a photo of sks {text}"
+    instance_prompt = f"modern disney style, sks {text}"
     # Preserve class of the concept (e.g.: toy, dog, painting)
     prior_preservation = False
-    prior_preservation_class_prompt = f"a photo of a {text} animal real"
+    prior_preservation_class_prompt = f"modern disney style, {text}"
 
     # Setting up all training args
     args = Namespace(
@@ -156,7 +151,8 @@ def train_dreambooth(guidance, text, image_views, max_train_steps=450):
     )
 
     # Generate Class Images
-    if(prior_preservation):
+    # if(prior_preservation):
+    if args.with_prior_preservation:
         class_images_dir = Path(prior_preservation_class_folder)
         if not class_images_dir.exists():
             class_images_dir.mkdir(parents=True)
@@ -181,6 +177,9 @@ def train_dreambooth(guidance, text, image_views, max_train_steps=450):
     text_encoder = guidance.text_encoder
     vae = guidance.vae
     unet = guidance.unet
+    
+    for p in unet.parameters():
+        p.requires_grad = True
 
     # Run training
     logger = get_logger(__name__)
@@ -268,7 +267,9 @@ def train_dreambooth(guidance, text, image_views, max_train_steps=450):
     progress_bar.set_description("Steps")
     global_step = 0
 
+
     for epoch in range(num_train_epochs):
+        
         unet.train()
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet):
@@ -318,5 +319,15 @@ def train_dreambooth(guidance, text, image_views, max_train_steps=450):
                 break
 
         accelerator.wait_for_everyone()
-    
+        
+             
+    images = guidance.prompt_to_img()
+    Image.fromarray(images[0]).save(f'{tmp_logs}/tmp_{epoch}.png')
+        
+    # for p in unet.parameters():
+    #     p.requires_grad = False
+        
     guidance.unet = accelerator.unwrap_model(unet)
+    guidance.vae = vae
+    guidance.tokenizer = tokenizer
+    guidance.text_encoder = text_encoder

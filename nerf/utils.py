@@ -356,7 +356,7 @@ class Trainer(object):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         save_image(pred_rgb[0], save_path)
 
-    def get_image_views(self, img_source='nerf'):
+    def get_image_views(self):
         
 
         rays_o, rays_d, H, W = self.few_shot_views # [B, N, 3], [B, N, 3]
@@ -370,15 +370,10 @@ class Trainer(object):
             if rand > 0.8: 
                 shading = 'albedo'
                 ambient_ratio = 1.0
-            # elif rand > 0.4: 
-            #     shading = 'textureless'
-            #     ambient_ratio = 0.1
             else: 
                 shading = 'lambertian'
                 ambient_ratio = 0.1
 
-        import ipdb; ipdb.set_trace()
-        # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         with torch.no_grad():
             outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
@@ -387,13 +382,15 @@ class Trainer(object):
         return pred_rgb
     
     def tune_sd(self, training_views, transfer_type):
-
+        assert transfer_type != 't_inversion', "t_inversion does not work for now..."
+        
         if self.opt.guidance != 'stable-diffusion':
             return
         
         save_image(training_views.permute(0, 3, 1, 2), os.path.join(self.workspace, 'front_views' ,f'df_{self.global_step:04d}_rgb.png'))
-        for p in self.guidance.parameters():
-            p.requires_grad = True
+        # avoid unknown bugs
+        # for p in self.guidance.parameters():
+        #     p.requires_grad = True
                         
         text = self.opt.subject_text
         ref_text = None
@@ -402,38 +399,28 @@ class Trainer(object):
             train_text_inversion(self.guidance, text, training_views, max_train_steps=self.opt.sd_tune_step)
             ref_text = self.t_inversion_ref_text
         elif transfer_type == 'dream_booth': # train dreambooth
-            train_dreambooth(self.guidance, text, training_views, max_train_steps=self.opt.sd_tune_step)
+            train_dreambooth(self.guidance, text, training_views, tmp_logs=self.opt.workspace, max_train_steps=self.opt.sd_tune_step)
             ref_text = self.dreambooth_ref_text
         else:
             raise NotImplementedError
         
-        for p in self.guidance.parameters():
-            p.requires_grad = False
+        # avoid unknown bugs
+        # TODO: fix this
+        # for p in self.guidance.parameters():
+        #     p.requires_grad = False
             
         self.prepare_text_embeddings(ref_text)
-
-    def load_gt_images(self, path):
-        images = []
-        for img in os.listdir(path):
-            img_tensor = transforms.ToTensor()(Image.open(os.path.join(path, img)).resize((256, 256))).unsqueeze(0)
-            if img_tensor.shape[1] != 3:
-                img_tensor = img_tensor[:, :3, :, :]
-            images.append(img_tensor)
-        images = self.normalize(torch.concat(images, dim=0).to(self.device).permute(0, 2, 3, 1))  # since we apply permute(0, 3, 1, 2) in the forward pass
-        return images
     
     def train_step(self, data):
-        # if self.global_step == 0:
-        if self.opt.tune_sd_at_start and self.global_step == 1:
-            training_views = self.load_gt_images(self.opt.gt_images_path)
         
-            self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
-            images = self.guidance.prompt_to_img(self.dreambooth_ref_text)
-
-            for i, image in enumerate(images):
-                print(f'{self.opt.workspace}/dreambooth_tmp_{i}.png')
-                Image.fromarray(image).save(f'{self.opt.workspace}/dreambooth_tmp_{i}.png')
-
+        # if self.opt.cycle_tuning and (self.global_step % self.cycle_tuning_frequency == 0):
+        #     training_views = self.get_image_views()
+        
+        #     self.tune_sd(training_views, transfer_type=self.opt.transfer_type)
+        #     # check the result after tune_sd
+        #     images = self.guidance.prompt_to_img(self.dreambooth_ref_text)
+        #     Image.fromarray(images[0]).save(f'{self.opt.workspace}/after_tune_sd_{self.global_step}.png')
+        
         # 1. rays_o, rays_d with.
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -450,29 +437,17 @@ class Trainer(object):
             if rand > 0.8: 
                 shading = 'albedo'
                 ambient_ratio = 1.0
-            # elif rand > 0.4: 
-            #     shading = 'textureless'
-            #     ambient_ratio = 0.1
             else: 
                 shading = 'lambertian'
                 ambient_ratio = 0.1
-
-        
-        # _t = time.time()
+  
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
-        # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
         if (self.local_step + 1) % 100 == 0:
             self.save_pred_rgb(pred_rgb)
-            # self.save_pred_rgb(data['rgb_gt'])
-            
-        # cv2.imwrite(save_path, cv2.cvtColor(pred_rgb, cv2.COLOR_RGB2BGR))
                 
-        # print(shading)
-        # torch_vis_2d(pred_rgb[0])
-        
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]
@@ -480,10 +455,7 @@ class Trainer(object):
         else:
             text_z = self.text_z
         
-        # encode pred_rgb to latents
-        # _t = time.time()
-        # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
-        
+
         if self.opt.O3 and (self.opt.transfer_type is None): # using mse loss for pre-training NeRF.
             loss = nn.functional.mse_loss(pred_rgb, data['rgb_gt'])
         else:
@@ -529,11 +501,7 @@ class Trainer(object):
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
         pred_ws = outputs['weights_sum'].reshape(B, H, W)
-        # mask_ws = outputs['mask'].reshape(B, H, W) # near < far
-
-        # loss_ws = pred_ws.sum() / mask_ws.sum()
-        # loss_ws = pred_ws.mean()
-
+        
         alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
         # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
         loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()

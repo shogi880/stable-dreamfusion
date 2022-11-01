@@ -13,3 +13,5 @@ output/
 nohup.out
 *.pth
 dataset/*
+pretrain_models/*
+pretrain_models/modern-disney-diffusion

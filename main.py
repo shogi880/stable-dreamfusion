@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
-    parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
+    parser.add_argument('--lambda_orient', type=float, default=0.1, help="loss scale for orientation")
     parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
     # parser.add_argument('--lambda_surface', type=float, default=1e-2, help="loss scale for surface preservation")
 
@@ -83,8 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--tune_sd_at_start', action="store_true", help="restart the whole training process")
     
     # parser.add_argument('--back_view_prompt', type=str, default=None, help="set non-prompt when rendering back view")
-    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu]")
-    # parser.add_argument('--surface_grid_resolution', type=int, default=100, help="resolution of the 3d grid")
+    parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu, disney]")
     # parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
     parser.add_argument('--sd_tune_iter', type=int, default=100, help="frequency to tune SD")
     parser.add_argument('--sd_tune_step', type=int, default=1, help="the tuning step per tune sd")
@@ -94,12 +93,12 @@ if __name__ == '__main__':
     # parser.add_argument('--classes', type=str, default=None, help="related classes")
     
     parser.add_argument('--transfer_type', type=str, default=None, help="select from [t_inversion, dream_booth, original]")
-    parser.add_argument('--ex_name', type=str, default=None, help="create experiment log folder")
+    parser.add_argument('--ex_name', type=str, default='test', help="create experiment log folder")
     
     opt = parser.parse_args()
 
     
-    workspace = os.path.join(opt.workspace, f'{opt.text.replace(" ", "_")}_subject_{opt.subject_text}_seed_{opt.seed}', f'lambda_entropy_{opt.lambda_entropy}_opacity_{opt.lambda_opacity}_orient{opt.lambda_orient}_smooth_{opt.lambda_smooth}')
+    workspace = os.path.join(opt.workspace, opt.ex_name, f'{opt.text.replace(" ", "_")}_subject_{opt.subject_text}_seed_{opt.seed}', f'lambda_entropy_{opt.lambda_entropy}_opacity_{opt.lambda_opacity}_orient{opt.lambda_orient}_smooth_{opt.lambda_smooth}')
     
     if opt.O:
         opt.fp16 = True
@@ -130,14 +129,12 @@ if __name__ == '__main__':
         opt.iters = 5000  # it's enough for pre-training.
         
         if opt.transfer_type is not None: # during only pretrain.
-            opt.iters = 3000
+            opt.iters = 10000
             opt.dir_text = True
-            if opt.transfer_type == 't_inversion':
-                opt.h = 128
-                opt.w = 128
+
             workspace = os.path.join(
                 workspace, 
-                f'transfer_params_{opt.transfer_type}_{opt.pretrain_ckpt.split("/")[-1].split(".")[0]}_lr_{opt.lr}_iters_{opt.iters}', 
+                f'{opt.pretrain_ckpt.split("/")[-1].split(".")[0]}_lr_{opt.lr}_iters_{opt.iters}', 
                 f'sd_tune_params_iter_{opt.sd_tune_iter}_step{opt.sd_tune_step}_start_at_{opt.sd_tune_at_n_iter}'
                 )
     opt.workspace = workspace
@@ -190,6 +187,30 @@ if __name__ == '__main__':
         else:
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
+        if opt.tune_sd_at_start and opt.sd_version != 'disney':
+            # getting the ground true image to train the dreambooth
+            normalize = lambda x : (x - 0.5) * 2
+            def load_gt_images(path):
+                images = []
+                for img in os.listdir(path):
+                    img_tensor = transforms.ToTensor()(Image.open(os.path.join(path, img)).resize((256, 256))).unsqueeze(0)
+                    if img_tensor.shape[1] != 3:
+                        img_tensor = img_tensor[:, :3, :, :]
+                    images.append(img_tensor)
+                images = normalize(torch.concat(images, dim=0).to(device).permute(0, 2, 3, 1))  # since we apply permute(0, 3, 1, 2) in the forward pass
+                
+                return images
+                
+            training_views = load_gt_images(opt.gt_images_path)
+            
+            os.makedirs(os.path.join(opt.workspace, 'gt_images'), exist_ok=True)
+            guidance = train_dreambooth(guidance, opt.subject_text, training_views, 
+                                        tmp_logs=opt.workspace, max_train_steps=opt.sd_tune_step)
+            images = guidance.prompt_to_img("modern disney style, sks elsa")
+
+            for i, image in enumerate(images):
+                Image.fromarray(image).save(f'{opt.workspace}/end_tune{i}.png')
+                
         optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
         # optimizer = lambda model: Shampoo(model.get_params(opt.lr))
 
