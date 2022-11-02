@@ -86,10 +86,10 @@ if __name__ == '__main__':
     parser.add_argument('--sd_version', type=str, default='CompVis', help="choose from [CompVis, waifu, disney]")
     # parser.add_argument('--surface_threshold', type=float, default=1.0, help="threshold for surface")
     parser.add_argument('--sd_tune_iter', type=int, default=100, help="frequency to tune SD")
-    parser.add_argument('--sd_tune_step', type=int, default=1, help="the tuning step per tune sd")
+    parser.add_argument('--sd_tune_step', type=int, default=100, help="the tuning step per tune sd")
     parser.add_argument('--sd_tune_at_n_iter', type=int, default=1000, help="frequency to tune SD")
 
-    parser.add_argument('--subject_text', type=str, default=None, help="text for the subject")
+    parser.add_argument('--class_prompt', type=str, default=None, help="text for the subject")
     # parser.add_argument('--classes', type=str, default=None, help="related classes")
     
     parser.add_argument('--transfer_type', type=str, default=None, help="select from [t_inversion, dream_booth, original]")
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     
-    workspace = os.path.join(opt.workspace, opt.ex_name, f'{opt.text.replace(" ", "_")}_subject_{opt.subject_text}_seed_{opt.seed}', f'lambda_entropy_{opt.lambda_entropy}_opacity_{opt.lambda_opacity}_orient{opt.lambda_orient}_smooth_{opt.lambda_smooth}')
+    workspace = os.path.join(opt.workspace, opt.ex_name, f'{opt.text.replace(" ", "_")}_subject_{opt.class_prompt}_seed_{opt.seed}', f'lambda_entropy_{opt.lambda_entropy}_opacity_{opt.lambda_opacity}_orient{opt.lambda_orient}_smooth_{opt.lambda_smooth}', f'sd_tune_step_{opt.sd_tune_step}')
     
     if opt.O:
         opt.fp16 = True
@@ -108,8 +108,8 @@ if __name__ == '__main__':
 
         # opt.lambda_entropy = 1e-4
         # opt.lambda_opacity = 0
-        # opt.h = 128  # get OOM using 256...
-        # opt.w = 128
+        opt.h = 128  # get OOM using 256...
+        opt.w = 128
         
     elif opt.O2:
         opt.fp16 = True
@@ -131,14 +131,15 @@ if __name__ == '__main__':
         if opt.transfer_type is not None: # during only pretrain.
             opt.iters = 10000
             opt.dir_text = True
-
+            opt.negative_dir_text = True
+            
             workspace = os.path.join(
                 workspace, 
                 f'{opt.pretrain_ckpt.split("/")[-1].split(".")[0]}_lr_{opt.lr}_iters_{opt.iters}', 
                 f'sd_tune_params_iter_{opt.sd_tune_iter}_step{opt.sd_tune_step}_start_at_{opt.sd_tune_at_n_iter}'
                 )
     opt.workspace = workspace
-    
+    os.makedirs(opt.workspace, exist_ok=True)
  
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -198,18 +199,16 @@ if __name__ == '__main__':
                         img_tensor = img_tensor[:, :3, :, :]
                     images.append(img_tensor)
                 images = normalize(torch.concat(images, dim=0).to(device).permute(0, 2, 3, 1))  # since we apply permute(0, 3, 1, 2) in the forward pass
-                
                 return images
-                
-            training_views = load_gt_images(opt.gt_images_path)
             
-            os.makedirs(os.path.join(opt.workspace, 'gt_images'), exist_ok=True)
-            guidance = train_dreambooth(guidance, opt.subject_text, training_views, 
+            
+            train_dreambooth(guidance=guidance, text=opt.text, class_prompt=opt.class_prompt,  image_views=load_gt_images(opt.gt_images_path), 
                                         tmp_logs=opt.workspace, max_train_steps=opt.sd_tune_step)
-            images = guidance.prompt_to_img("modern disney style, sks elsa")
+            opt.text = f"sks {opt.text}"
+            images = guidance.prompt_to_img(opt.text)
 
             for i, image in enumerate(images):
-                Image.fromarray(image).save(f'{opt.workspace}/end_tune{i}.png')
+                Image.fromarray(image).save(f'{opt.workspace}/end_tune_{i}.png')
                 
         optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
         # optimizer = lambda model: Shampoo(model.get_params(opt.lr))
@@ -223,7 +222,6 @@ if __name__ == '__main__':
 
         trainer = Trainer('df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True, few_shot_views=few_shot_views)
 
-        # model.load_state_dict(torch.load(opt.load_model))
         if opt.reload_model:
             trainer.load_checkpoint(opt.pretrain_ckpt, model_only=True)
         

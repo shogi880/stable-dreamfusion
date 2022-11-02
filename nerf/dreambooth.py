@@ -118,14 +118,15 @@ class PromptDataset(Dataset):
         example["index"] = index
         return example
 
-def train_dreambooth(guidance, text, image_views, tmp_logs, max_train_steps=450):
+def train_dreambooth(guidance, text, class_prompt, image_views, tmp_logs, max_train_steps=450):
 
     # Settings for your newly created concept
     # `instance_prompt` is a prompt that should contain a good description of what your object or style is, together with the initializer word `sks`
-    instance_prompt = f"modern disney style, sks {text}"
+    # instance_prompt = f"modern disney style, sks {text}"
+    instance_prompt = 'sks ' + text
     # Preserve class of the concept (e.g.: toy, dog, painting)
     prior_preservation = False
-    prior_preservation_class_prompt = f"modern disney style, {text}"
+    prior_preservation_class_prompt = class_prompt
 
     # Setting up all training args
     args = Namespace(
@@ -320,10 +321,7 @@ def train_dreambooth(guidance, text, image_views, tmp_logs, max_train_steps=450)
 
         accelerator.wait_for_everyone()
         
-             
-    images = guidance.prompt_to_img()
-    Image.fromarray(images[0]).save(f'{tmp_logs}/tmp_{epoch}.png')
-        
+    # 
     # for p in unet.parameters():
     #     p.requires_grad = False
         
@@ -331,3 +329,7 @@ def train_dreambooth(guidance, text, image_views, tmp_logs, max_train_steps=450)
     guidance.vae = vae
     guidance.tokenizer = tokenizer
     guidance.text_encoder = text_encoder
+    
+    images = guidance.prompt_to_img(instance_prompt)
+    Image.fromarray(images[0]).save(f'{tmp_logs}/end_stune_sd_tmp_{epoch}.png')
+    

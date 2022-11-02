@@ -299,7 +299,7 @@ class Trainer(object):
         self.normalize = lambda x : (x - 0.5) * 2
 
         if self.opt.transfer_type in ['t_inversion', 'dream_booth']:
-            text = self.opt.subject_text
+            text = self.opt.text
             self.dreambooth_ref_text = self.opt.text.replace(text, f'sks {text}')
             self.t_inversion_ref_text = self.opt.text.replace(text, f'<{text}>')
 
@@ -392,7 +392,7 @@ class Trainer(object):
         # for p in self.guidance.parameters():
         #     p.requires_grad = True
                         
-        text = self.opt.subject_text
+        text = self.opt.text
         ref_text = None
 
         if transfer_type == 't_inversion':
